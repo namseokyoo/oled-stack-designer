@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0.0",
+  "metadata": {
+    "name": "Minimal Stack",
+    "version": "1.0.0",
+    "createdAt": "2026-03-24T00:00:00.000Z",
+    "updatedAt": "2026-03-24T00:00:00.000Z"
+  },
+  "viewMode": "scientific",
+  "structureMode": "single",
+  "palette": "classic",
+  "thicknessMode": "uniform",
+  "stacks": [
+    {
+      "id": "stack-1",
+      "label": "Device",
+      "layers": [
+        { "id": "layer-1", "name": "Cathode", "role": "cathode", "material": "Al", "thickness": 100, "colorToken": "cathode", "appliesTo": ["r", "g", "b"] },
+        { "id": "layer-2", "name": "EML", "role": "eml", "material": "CBP:Ir(ppy)3", "thickness": 40, "colorToken": "eml-g", "appliesTo": ["r", "g", "b"] },
+        { "id": "layer-3", "name": "Anode", "role": "anode", "material": "ITO", "thickness": 150, "colorToken": "anode", "appliesTo": ["r", "g", "b"] }
+      ]
+    }
+  ]
+}

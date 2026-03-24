@@ -1,0 +1,114 @@
+/* ================================================================
+   OLED Stack Designer - Design Tokens (v4.1)
+   Source: design.md (다빈치, 2026-03-24)
+================================================================ */
+
+:root {
+  --bg-base: oklch(14% 0.01 250);
+  --bg-surface: oklch(19% 0.01 250);
+  --bg-elevated: oklch(23% 0.01 250);
+  --bg-overlay: oklch(28% 0.015 250);
+
+  --border-subtle: oklch(30% 0.01 250);
+  --border-active: oklch(55% 0.15 265);
+
+  --text-primary: oklch(92% 0.005 250);
+  --text-secondary: oklch(65% 0.01 250);
+  --text-muted: oklch(45% 0.01 250);
+
+  --accent-blue: oklch(65% 0.2 265);
+  --accent-active: oklch(72% 0.22 265);
+
+  --danger: oklch(62% 0.22 25);
+  --success: oklch(68% 0.18 145);
+  --warning: oklch(80% 0.16 80);
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-pill: 9999px;
+
+  --shadow-sm: 0 1px 3px oklch(0% 0 0 / 0.3);
+  --shadow-md: 0 4px 16px oklch(0% 0 0 / 0.4);
+  --shadow-lg: 0 8px 32px oklch(0% 0 0 / 0.5);
+  --shadow-glow: 0 0 20px oklch(65% 0.2 265 / 0.25);
+
+  --font-ui: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --duration-fast: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 380ms;
+
+  --chrome-toolbar-bg: color-mix(in oklab, var(--bg-surface) 86%, transparent);
+  --chrome-panel-bg: color-mix(in oklab, var(--bg-surface) 78%, transparent);
+  --surface-active: color-mix(in oklab, var(--accent-blue) 14%, var(--bg-elevated));
+  --surface-accent-soft: color-mix(in oklab, var(--accent-blue) 12%, transparent);
+  --surface-line-faint: color-mix(in oklab, var(--border-subtle) 40%, transparent);
+  --overlay-backdrop: oklch(0% 0 0 / 0.52);
+  --layer-action-bg: oklch(0% 0 0 / 0.24);
+  --canvas-glow-a: color-mix(in oklab, var(--accent-blue) 32%, transparent);
+  --canvas-glow-b: color-mix(in oklab, var(--success) 22%, transparent);
+  --button-primary-text: oklch(99% 0 0);
+  --layer-text-primary: var(--text-primary);
+  --layer-text-secondary: color-mix(in oklab, var(--text-primary) 76%, transparent);
+}
+
+:root,
+[data-palette='classic'] {
+  --layer-cathode: oklch(42% 0.015 250);
+  --layer-eil: oklch(82% 0.09 82);
+  --layer-etl: oklch(72% 0.12 295);
+  --layer-eml-b: oklch(62% 0.22 265);
+  --layer-eml-g: oklch(68% 0.22 145);
+  --layer-eml-r: oklch(60% 0.24 25);
+  --layer-cgl: oklch(58% 0.03 250);
+  --layer-htl: oklch(72% 0.14 185);
+  --layer-hil: oklch(78% 0.1 340);
+  --layer-anode: oklch(82% 0.06 220);
+}
+
+[data-palette='pastel'] {
+  --layer-cathode: oklch(72% 0.04 250);
+  --layer-eil: oklch(90% 0.06 82);
+  --layer-etl: oklch(85% 0.07 295);
+  --layer-eml-b: oklch(78% 0.1 260);
+  --layer-eml-g: oklch(82% 0.09 145);
+  --layer-eml-r: oklch(78% 0.09 20);
+  --layer-cgl: oklch(80% 0.03 250);
+  --layer-htl: oklch(84% 0.08 185);
+  --layer-hil: oklch(88% 0.06 340);
+  --layer-anode: oklch(88% 0.05 220);
+}
+
+[data-palette='vivid'] {
+  --layer-cathode: oklch(35% 0.05 270);
+  --layer-eil: oklch(88% 0.18 90);
+  --layer-etl: oklch(68% 0.28 300);
+  --layer-eml-b: oklch(60% 0.3 265);
+  --layer-eml-g: oklch(72% 0.3 142);
+  --layer-eml-r: oklch(58% 0.32 25);
+  --layer-cgl: oklch(55% 0.08 250);
+  --layer-htl: oklch(70% 0.25 190);
+  --layer-hil: oklch(72% 0.22 345);
+  --layer-anode: oklch(78% 0.16 220);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

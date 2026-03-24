@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0.0",
+  "metadata": {
+    "name": "RGB FMM Structure",
+    "version": "1.0.0",
+    "createdAt": "2026-03-24T00:00:00.000Z",
+    "updatedAt": "2026-03-24T00:00:00.000Z"
+  },
+  "viewMode": "scientific",
+  "structureMode": "rgb",
+  "palette": "classic",
+  "thicknessMode": "uniform",
+  "stacks": [
+    {
+      "id": "stack-1",
+      "label": "RGB Device",
+      "layers": [
+        { "id": "layer-1", "name": "Cathode", "role": "cathode", "material": "Al", "thickness": 100, "colorToken": "cathode", "appliesTo": ["r", "g", "b"] },
+        { "id": "layer-2", "name": "EIL", "role": "eil", "material": "LiF", "thickness": 1, "colorToken": "eil", "appliesTo": ["r", "g", "b"] },
+        { "id": "layer-3", "name": "ETL", "role": "etl", "material": "Alq3", "thickness": 30, "colorToken": "etl", "appliesTo": ["r", "g", "b"] },
+        { "id": "layer-4", "name": "EML-R", "role": "eml", "material": "CBP:Ir(piq)2(acac)", "thickness": 40, "colorToken": "eml-r", "appliesTo": ["r"] },
+        { "id": "layer-5", "name": "EML-G", "role": "eml", "material": "CBP:Ir(ppy)3", "thickness": 35, "colorToken": "eml-g", "appliesTo": ["g"] },
+        { "id": "layer-6", "name": "EML-B", "role": "eml", "material": "mCBP:FCNIrpic", "thickness": 25, "colorToken": "eml-b", "appliesTo": ["b"] },
+        { "id": "layer-7", "name": "HTL", "role": "htl", "material": "NPB", "thickness": 50, "colorToken": "htl", "appliesTo": ["r", "g", "b"] },
+        { "id": "layer-8", "name": "HIL", "role": "hil", "material": "MoO3", "thickness": 10, "colorToken": "hil", "appliesTo": ["r", "g", "b"] },
+        { "id": "layer-9", "name": "Anode", "role": "anode", "material": "ITO", "thickness": 150, "colorToken": "anode", "appliesTo": ["r", "g", "b"] }
+      ]
+    }
+  ]
+}
