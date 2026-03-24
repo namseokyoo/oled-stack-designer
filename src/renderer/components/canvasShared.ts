@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { useStackStore } from '../stores/useStackStore'
 import type { Layer } from '../types'
-import { MIN_REAL_HEIGHT } from './LayerBlock'
 
+export const INSERT_ZONE_HEIGHT = 4
 export const CANVAS_LAYER_AREA_HEIGHT = 480
 
 export function computeScaleFactor(layers: Layer[], canvasHeight: number): number {
@@ -11,12 +11,14 @@ export function computeScaleFactor(layers: Layer[], canvasHeight: number): numbe
   }
 
   const totalThickness = layers.reduce((sum, layer) => sum + layer.thickness, 0)
-  const availableHeight = canvasHeight - layers.length * 22
-  const naiveScale = availableHeight / totalThickness
-  const minThickness = Math.min(...layers.map((layer) => layer.thickness))
-  const minScaleForMin = MIN_REAL_HEIGHT / minThickness
+  const gapTotal = (layers.length - 1) * INSERT_ZONE_HEIGHT
+  const availableHeight = canvasHeight - gapTotal
 
-  return Math.max(naiveScale, minScaleForMin)
+  // naiveScale만 사용: 개별 레이어 최소 높이(36px)는 LayerBlock의 getBlockHeight에서 Math.max로 처리
+  // scaleFactor를 전역으로 올리면 큰 레이어(150nm)가 캔버스를 넘어버림
+  const naiveScale = availableHeight / totalThickness
+
+  return Math.max(naiveScale, 0.1)
 }
 
 export function isInputFocused(): boolean {

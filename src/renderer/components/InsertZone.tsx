@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useStackStore } from '../stores/useStackStore'
+import { INSERT_ZONE_HEIGHT } from './canvasShared'
 
 interface InsertZoneProps {
   afterId?: string
@@ -20,7 +21,7 @@ export function InsertZoneWrapper({ afterId }: InsertZoneProps) {
       onMouseLeave={() => setHovered(false)}
       onClick={() => addLayer(afterId)}
       style={{
-        height: hovered ? 16 : 4,
+        height: hovered ? 16 : INSERT_ZONE_HEIGHT,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
