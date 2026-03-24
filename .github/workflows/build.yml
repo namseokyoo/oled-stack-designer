@@ -37,27 +37,33 @@ jobs:
 
       - name: Generate placeholder icons (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
+        shell: python
         run: |
-          New-Item -ItemType Directory -Force -Path build
-          if (-not (Test-Path "build/icon.ico")) {
-            # 1x1 pixel minimal ICO file (binary)
-            $bytes = [byte[]](
-              0x00,0x00,0x01,0x00,0x01,0x00,0x10,0x10,
-              0x00,0x00,0x01,0x00,0x20,0x00,0x68,0x04,
-              0x00,0x00,0x16,0x00,0x00,0x00,0x28,0x00,
-              0x00,0x00,0x10,0x00,0x00,0x00,0x20,0x00,
-              0x00,0x00,0x01,0x00,0x20,0x00,0x00,0x00,
-              0x00,0x00,0x00,0x04,0x00,0x00,0x00,0x00,
-              0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-              0x00,0x00,0x00,0x00,0x00,0x00
-            )
-            $bytes += [byte[]](0x00) * (0x400 + 0x68 - $bytes.Length)
-            [System.IO.File]::WriteAllBytes("build/icon.ico", $bytes)
-            Write-Host "Placeholder icon.ico created"
-          } else {
-            Write-Host "icon.ico already exists"
-          }
+          import struct, zlib, os
+          os.makedirs('build', exist_ok=True)
+          if not os.path.exists('build/icon.ico'):
+              def make_png(w, h, color=(100, 100, 100)):
+                  def chunk(name, data):
+                      c = struct.pack('>I', len(data)) + name + data
+                      return c + struct.pack('>I', zlib.crc32(name + data) & 0xffffffff)
+                  ihdr = struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)
+                  raw = b''.join(b'\x00' + bytes(color) * w for _ in range(h))
+                  idat = zlib.compress(raw)
+                  return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b'')
+              sizes = [256, 48, 32, 16]
+              pngs = [make_png(s, s) for s in sizes]
+              num = len(pngs)
+              header = struct.pack('<HHH', 0, 1, num)
+              offset = 6 + num * 16
+              entries = b''
+              for i, (s, png) in enumerate(zip(sizes, pngs)):
+                  entries += struct.pack('<BBBBHHII', min(s, 255), min(s, 255), 0, 0, 1, 32, len(png), offset)
+                  offset += len(png)
+              with open('build/icon.ico', 'wb') as f:
+                  f.write(header + entries + b''.join(pngs))
+              print('icon.ico created (256x256)')
+          else:
+              print('icon.ico already exists')
 
       - name: Generate placeholder icons (macOS)
         if: runner.os == 'macOS'
