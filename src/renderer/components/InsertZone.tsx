@@ -20,19 +20,20 @@ export function InsertZoneWrapper({ afterId }: InsertZoneProps) {
       onMouseLeave={() => setHovered(false)}
       onClick={() => addLayer(afterId)}
       style={{
-        height: 22,
+        height: hovered ? 16 : 4,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'pointer',
-        position: 'relative'
+        position: 'relative',
+        transition: 'height var(--duration-fast) var(--ease-smooth)'
       }}
       title="여기에 새 레이어 추가"
     >
       <div
         style={{
-          width: hovered ? 26 : '100%',
-          height: hovered ? 26 : 1,
+          width: hovered ? 20 : '100%',
+          height: hovered ? 20 : 1,
           borderRadius: hovered ? '50%' : 999,
           background: hovered ? 'var(--accent-blue)' : 'var(--surface-line-faint)',
           display: 'grid',

@@ -192,7 +192,7 @@ function SingleCanvas({ onOpenExamples }: CanvasProps) {
                 type="button"
                 onClick={() => addLayer(layers[layers.length - 1]?.id)}
                 style={{
-                  marginTop: 6,
+                  marginTop: 8,
                   alignSelf: 'center',
                   display: 'flex',
                   alignItems: 'center',

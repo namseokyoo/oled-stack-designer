@@ -228,38 +228,19 @@ export function LayerBlock({
             {layer.name} · {layer.thickness}nm
           </span>
         ) : (
-          <div
+          <span
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 3
+              fontSize: 14,
+              fontWeight: 700,
+              color: 'var(--layer-text-primary)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              textShadow: '0 1px 2px var(--layer-action-bg)'
             }}
           >
-            <span
-              style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: 'var(--layer-text-primary)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                textShadow: '0 1px 2px var(--layer-action-bg)'
-              }}
-            >
-              {layer.name}
-            </span>
-            <span
-              style={{
-                fontSize: 11,
-                fontWeight: 600,
-                color: 'var(--layer-text-secondary)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.04em'
-              }}
-            >
-              {layer.role}
-            </span>
-          </div>
+            {layer.name}
+          </span>
         )}
       </div>
 
