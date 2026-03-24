@@ -75,7 +75,6 @@ export function LayerBlock({
   const [draftName, setDraftName] = useState(layer.name)
   const inputRef = useRef<HTMLInputElement>(null)
   const blockHeight = getBlockHeight(layer, thicknessMode, scaleFactor)
-  const isCompact = thicknessMode === 'real' && blockHeight < 44
   const isLocked = layer.locked === true
   const showDeleteAction = !isLocked && (hovered || isSelected) && !isEditing && !isDragging
 
@@ -145,7 +144,7 @@ export function LayerBlock({
     transition:
       'height var(--duration-slow) var(--ease-smooth), box-shadow var(--duration-fast) var(--ease-smooth), border-color var(--duration-fast) var(--ease-smooth), transform var(--duration-fast) var(--ease-smooth)',
     userSelect: 'none',
-    overflow: 'hidden',
+    overflow: 'visible',
     opacity: isDragging ? 0.9 : 1
   }
 
@@ -161,7 +160,7 @@ export function LayerBlock({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={blockStyle}
-      title={isCompact ? layer.material || 'Material not set' : undefined}
+      title={blockHeight < 44 ? layer.material || 'Material not set' : undefined}
     >
       <div
         style={{
@@ -207,31 +206,16 @@ export function LayerBlock({
               padding: 0,
               background: 'transparent',
               color: 'var(--layer-text-primary)',
-              fontSize: isCompact ? 12 : 14,
-              fontWeight: isCompact ? 600 : 700,
+              fontSize: blockHeight < 44 ? 12 : 14,
+              fontWeight: blockHeight < 44 ? 600 : 700,
               boxShadow: 'none'
             }}
           />
-        ) : isCompact ? (
-          <span
-            style={{
-              display: 'block',
-              fontSize: 12,
-              fontWeight: 600,
-              color: 'var(--layer-text-primary)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              textShadow: '0 1px 2px var(--layer-action-bg)'
-            }}
-          >
-            {layer.name} · {layer.thickness}nm
-          </span>
         ) : (
           <span
             style={{
-              fontSize: 14,
-              fontWeight: 700,
+              fontSize: blockHeight < 44 ? 12 : 14,
+              fontWeight: blockHeight < 44 ? 600 : 700,
               color: 'var(--layer-text-primary)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -244,45 +228,60 @@ export function LayerBlock({
         )}
       </div>
 
-      {!isCompact ? (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: 3,
-            marginRight: showDeleteAction ? 36 : isLocked ? 24 : 0,
-            position: 'relative',
-            zIndex: 1,
-            transition: 'margin-right var(--duration-fast) var(--ease-smooth)'
-          }}
-        >
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 3,
+          marginRight: showDeleteAction ? 36 : isLocked ? 24 : 0,
+          position: 'relative',
+          zIndex: 1,
+          transition: 'margin-right var(--duration-fast) var(--ease-smooth)',
+          flexShrink: 0
+        }}
+      >
+        {blockHeight < 44 ? (
           <span
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 11,
               color: 'var(--layer-text-primary)',
-              textShadow: '0 1px 2px var(--layer-action-bg)'
+              textShadow: '0 1px 2px var(--layer-action-bg)',
+              whiteSpace: 'nowrap'
             }}
           >
-            {layer.thickness} nm
+            {layer.thickness}nm · {layer.material || 'No material'}
           </span>
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--layer-text-secondary)',
-              maxWidth: 140,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
-            }}
-            title={layer.material || 'Material not set'}
-          >
-            {layer.material || 'No material'}
-          </span>
-        </div>
-      ) : null}
+        ) : (
+          <>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11,
+                color: 'var(--layer-text-primary)',
+                textShadow: '0 1px 2px var(--layer-action-bg)'
+              }}
+            >
+              {layer.thickness} nm
+            </span>
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                color: 'var(--layer-text-secondary)',
+                maxWidth: 140,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}
+              title={layer.material || 'Material not set'}
+            >
+              {layer.material || 'No material'}
+            </span>
+          </>
+        )}
+      </div>
 
       {isLocked ? (
         <div
