@@ -1,0 +1,141 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            artifact_pattern: 'dist/*.exe'
+            artifact_name: windows-installer
+          - os: macos-latest
+            platform: mac
+            artifact_pattern: 'dist/*.dmg'
+            artifact_name: macos-dmg
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate placeholder icons (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build
+          if (-not (Test-Path "build/icon.ico")) {
+            # 1x1 pixel minimal ICO file (binary)
+            $bytes = [byte[]](
+              0x00,0x00,0x01,0x00,0x01,0x00,0x10,0x10,
+              0x00,0x00,0x01,0x00,0x20,0x00,0x68,0x04,
+              0x00,0x00,0x16,0x00,0x00,0x00,0x28,0x00,
+              0x00,0x00,0x10,0x00,0x00,0x00,0x20,0x00,
+              0x00,0x00,0x01,0x00,0x20,0x00,0x00,0x00,
+              0x00,0x00,0x00,0x04,0x00,0x00,0x00,0x00,
+              0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+              0x00,0x00,0x00,0x00,0x00,0x00
+            )
+            $bytes += [byte[]](0x00) * (0x400 + 0x68 - $bytes.Length)
+            [System.IO.File]::WriteAllBytes("build/icon.ico", $bytes)
+            Write-Host "Placeholder icon.ico created"
+          } else {
+            Write-Host "icon.ico already exists"
+          }
+
+      - name: Generate placeholder icons (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p build
+          if [ ! -f "build/icon.icns" ]; then
+            # Create a minimal PNG then convert to icns via iconutil
+            mkdir -p /tmp/oled_icon.iconset
+            # Generate a simple 16x16 gray PNG using Python
+            python3 - <<'PYEOF'
+          import struct, zlib
+
+          def make_png(width, height, color=(100, 100, 100)):
+              def chunk(name, data):
+                  c = struct.pack('>I', len(data)) + name + data
+                  return c + struct.pack('>I', zlib.crc32(name + data) & 0xffffffff)
+              ihdr = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+              raw = b''.join(b'\x00' + bytes(color) * width for _ in range(height))
+              idat = zlib.compress(raw)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', idat) + chunk(b'IEND', b'')
+
+          sizes = [16, 32, 128, 256, 512]
+          for s in sizes:
+              with open(f'/tmp/oled_icon.iconset/icon_{s}x{s}.png', 'wb') as f:
+                  f.write(make_png(s, s))
+              with open(f'/tmp/oled_icon.iconset/icon_{s}x{s}@2x.png', 'wb') as f:
+                  f.write(make_png(s * 2, s * 2))
+          PYEOF
+            iconutil -c icns /tmp/oled_icon.iconset -o build/icon.icns
+            echo "Placeholder icon.icns created"
+          else
+            echo "icon.icns already exists"
+          fi
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Build (electron-vite)
+        run: npm run build
+
+      - name: Package (electron-builder)
+        run: npx electron-builder --${{ matrix.platform }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_pattern }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: release-assets/
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
