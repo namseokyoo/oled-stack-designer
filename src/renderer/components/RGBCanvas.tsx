@@ -1,4 +1,22 @@
 import { useState } from 'react'
+import {
+  closestCenter,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Lock, Plus } from 'lucide-react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useStackStore } from '../stores/useStackStore'
@@ -6,6 +24,7 @@ import type { ChannelCode, Layer } from '../types'
 import { ContextMenu, SplitConfirmDialog, type ContextMenuState } from './ContextMenu'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
 import { EmptyState } from './EmptyState'
+import { InsertZoneWrapper } from './InsertZone'
 import { getBlockHeight, getLayerColor, LayerBlock } from './LayerBlock'
 import {
   CANVAS_LAYER_AREA_HEIGHT,
@@ -42,6 +61,14 @@ function getLastEmlIndex(layers: Layer[]): number {
   }
 
   return -1
+}
+
+function getSortableId(layerId: string, location: string): string {
+  return `${layerId}::${location}`
+}
+
+function getLayerIdFromSortableId(sortableId: string): string {
+  return sortableId.split('::')[0] ?? sortableId
 }
 
 interface RGBLayerCellProps {
@@ -105,40 +132,93 @@ function RGBLayerCell({
       />
 
       {showLabel ? (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            gap: 2,
-            minWidth: 0,
-            position: 'relative',
-            zIndex: 1
-          }}
-        >
-          <span
+        <>
+          <div
             style={{
-              fontSize: isCompact ? 11 : 12,
-              fontWeight: 700,
-              color: 'var(--layer-text-primary)',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              textShadow: '0 1px 2px var(--layer-action-bg)'
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+              gap: 2,
+              minWidth: 0,
+              position: 'relative',
+              zIndex: 1,
+              flex: 1
             }}
           >
-            {layer.name}
-          </span>
-          <span
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 700,
+                color: 'var(--layer-text-primary)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                textShadow: '0 1px 2px var(--layer-action-bg)'
+              }}
+            >
+              {layer.name}
+            </span>
+          </div>
+
+          <div
             style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              color: 'var(--layer-text-secondary)'
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: isCompact ? 0 : 2,
+              minWidth: 0,
+              position: 'relative',
+              zIndex: 1,
+              flexShrink: 0
             }}
           >
-            {layer.thickness} nm
-          </span>
-        </div>
+            {isCompact ? (
+              <span
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--layer-text-primary)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: 140,
+                  textShadow: '0 1px 2px var(--layer-action-bg)'
+                }}
+                title={layer.material || 'Material not set'}
+              >
+                {layer.thickness}nm · {layer.material || 'No material'}
+              </span>
+            ) : (
+              <>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11,
+                    color: 'var(--layer-text-primary)',
+                    whiteSpace: 'nowrap',
+                    textShadow: '0 1px 2px var(--layer-action-bg)'
+                  }}
+                >
+                  {layer.thickness} nm
+                </span>
+                <span
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 10,
+                    color: 'var(--layer-text-secondary)',
+                    maxWidth: 100,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                  title={layer.material || 'Material not set'}
+                >
+                  {layer.material || 'No material'}
+                </span>
+              </>
+            )}
+          </div>
+        </>
       ) : null}
 
       {showLock ? (
@@ -151,6 +231,27 @@ function RGBLayerCell({
   )
 }
 
+interface SortableRGBLayerCellProps extends RGBLayerCellProps {
+  sortableId: string
+}
+
+function SortableRGBLayerCell(props: SortableRGBLayerCellProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortableDragging } =
+    useSortable({ id: props.sortableId, disabled: props.layer.locked === true })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isSortableDragging ? 0.4 : 1
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <RGBLayerCell {...props} />
+    </div>
+  )
+}
+
 export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const layers = useStackStore((state) => state.project.stacks[0]?.layers ?? [])
   const selectedLayerId = useStackStore((state) => state.selectedLayerId)
@@ -158,17 +259,39 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const selectLayer = useStackStore((state) => state.selectLayer)
   const addLayer = useStackStore((state) => state.addLayer)
   const removeLayer = useStackStore((state) => state.removeLayer)
+  const reorderLayer = useStackStore((state) => state.reorderLayer)
   const splitToChannels = useStackStore((state) => state.splitToChannels)
 
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null)
   const [splitTarget, setSplitTarget] = useState<Layer | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
 
   const scaleFactor =
     thicknessMode === 'real' ? computeScaleFactor(layers, CANVAS_LAYER_AREA_HEIGHT) : 1
   const lastEmlIndex = getLastEmlIndex(layers)
   const channelSection = lastEmlIndex >= 0 ? layers.slice(0, lastEmlIndex + 1) : []
   const lowerSection = lastEmlIndex >= 0 ? layers.slice(lastEmlIndex + 1) : layers
+  const sortableItems = [
+    ...CHANNELS.flatMap((channel) =>
+      channelSection
+        .filter((layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel))
+        .map((layer) => getSortableId(layer.id, `channel-${channel}`))
+    ),
+    ...lowerSection.flatMap((layer) =>
+      isCommonLayer(layer)
+        ? []
+        : CHANNELS.filter((channel) => layer.appliesTo.includes(channel)).map((channel) =>
+            getSortableId(layer.id, `lower-${channel}`)
+          )
+    )
+  ]
+  const activeLayer = layers.find((layer) => layer.id === activeId) ?? null
 
   const handleDeleteRequest = (id: string) => {
     const layer = layers.find((entry) => entry.id === id)
@@ -198,11 +321,38 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
     setDeleteTarget(null)
   }
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setContextMenu(null)
+    setActiveId(getLayerIdFromSortableId(String(event.active.id)))
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    const activeLayerId = getLayerIdFromSortableId(String(active.id))
+
+    setActiveId(null)
+
+    if (!over) {
+      return
+    }
+
+    const overLayerId = getLayerIdFromSortableId(String(over.id))
+
+    if (activeLayerId === overLayerId) {
+      return
+    }
+
+    const newIndex = layers.findIndex((layer) => layer.id === overLayerId)
+
+    if (newIndex >= 0) {
+      reorderLayer(activeLayerId, newIndex)
+    }
+  }
+
   const renderLowerLayer = (layer: Layer) => {
     if (isCommonLayer(layer)) {
       return (
         <LayerBlock
-          key={layer.id}
           layer={layer}
           thicknessMode={thicknessMode}
           scaleFactor={scaleFactor}
@@ -213,14 +363,12 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
     }
 
     return (
-      <div
-        key={layer.id}
-        style={{ display: 'flex', alignItems: 'stretch', gap: 4, width: '100%' }}
-      >
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 4, width: '100%' }}>
         {CHANNELS.map((channel) =>
           layer.appliesTo.includes(channel) ? (
-            <RGBLayerCell
+            <SortableRGBLayerCell
               key={`${layer.id}-${channel}`}
+              sortableId={getSortableId(layer.id, `lower-${channel}`)}
               layer={layer}
               thicknessMode={thicknessMode}
               scaleFactor={scaleFactor}
@@ -268,102 +416,146 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
             <EmptyState onOpenExamples={onOpenExamples} />
           </div>
         ) : (
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 540,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--sp-2)',
-              paddingBottom: 48
-            }}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
           >
-            {channelSection.length > 0 ? (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  gap: 4,
-                  width: '100%'
-                }}
-              >
-                {CHANNELS.map((channel) => {
-                  const channelLayers = channelSection.filter(
-                    (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
-                  )
-
-                  return (
-                    <div
-                      key={channel}
-                      style={{
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 'var(--sp-2)'
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: 12,
-                          fontWeight: 700,
-                          color: CHANNEL_META[channel].color,
-                          letterSpacing: '0.08em',
-                          textAlign: 'center'
-                        }}
-                      >
-                        {CHANNEL_META[channel].label}
-                      </span>
-
-                      <div
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 'var(--sp-2)'
-                        }}
-                      >
-                        {channelLayers.map((layer) => (
-                          <RGBLayerCell
-                            key={`${layer.id}-${channel}`}
-                            layer={layer}
-                            thicknessMode={thicknessMode}
-                            scaleFactor={scaleFactor}
-                            isSelected={selectedLayerId === layer.id}
-                            onSelect={selectLayer}
-                            onContextMenu={(event) => handleContextMenu(event, layer.id)}
-                            showLabel={layer.appliesTo.length === 1 || channel === 'g'}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
-
-            {lowerSection.map((layer) => renderLowerLayer(layer))}
-
-            <button
-              type="button"
-              onClick={() => addLayer(layers[layers.length - 1]?.id)}
+            <div
               style={{
-                marginTop: 6,
-                alignSelf: 'center',
+                width: '100%',
+                maxWidth: 540,
                 display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '10px 16px',
-                borderRadius: 'var(--radius-pill)',
-                border: '1px dashed var(--border-subtle)',
-                color: 'var(--text-secondary)',
-                background: 'var(--bg-surface)',
-                fontSize: 12,
-                fontWeight: 700
+                flexDirection: 'column',
+                gap: 'var(--sp-2)',
+                paddingBottom: 48
               }}
             >
-              <Plus size={14} />
-              레이어 추가
-            </button>
-          </div>
+              <SortableContext items={sortableItems} strategy={verticalListSortingStrategy}>
+                {channelSection.length > 0 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-end',
+                      gap: 4,
+                      width: '100%'
+                    }}
+                  >
+                    {CHANNELS.map((channel) => {
+                      const channelLayers = channelSection.filter(
+                        (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
+                      )
+
+                      return (
+                        <div
+                          key={channel}
+                          style={{
+                            flex: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 'var(--sp-2)'
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: CHANNEL_META[channel].color,
+                              letterSpacing: '0.08em',
+                              textAlign: 'center'
+                            }}
+                          >
+                            {CHANNEL_META[channel].label}
+                          </span>
+
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: 'var(--sp-2)'
+                            }}
+                          >
+                            {channelLayers.map((layer) => (
+                              <div
+                                key={`${layer.id}-${channel}`}
+                                style={{ display: 'flex', flexDirection: 'column' }}
+                              >
+                                <SortableRGBLayerCell
+                                  sortableId={getSortableId(layer.id, `channel-${channel}`)}
+                                  layer={layer}
+                                  thicknessMode={thicknessMode}
+                                  scaleFactor={scaleFactor}
+                                  isSelected={selectedLayerId === layer.id}
+                                  onSelect={selectLayer}
+                                  onContextMenu={(event) => handleContextMenu(event, layer.id)}
+                                  showLabel={layer.appliesTo.length === 1 || channel === 'g'}
+                                />
+                                <InsertZoneWrapper afterId={layer.id} />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : null}
+
+                {lowerSection.map((layer) => (
+                  <div key={layer.id} style={{ display: 'flex', flexDirection: 'column' }}>
+                    {renderLowerLayer(layer)}
+                    <InsertZoneWrapper afterId={layer.id} />
+                  </div>
+                ))}
+              </SortableContext>
+
+              <button
+                type="button"
+                onClick={() => addLayer(layers[layers.length - 1]?.id)}
+                style={{
+                  marginTop: 6,
+                  alignSelf: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '10px 16px',
+                  borderRadius: 'var(--radius-pill)',
+                  border: '1px dashed var(--border-subtle)',
+                  color: 'var(--text-secondary)',
+                  background: 'var(--bg-surface)',
+                  fontSize: 12,
+                  fontWeight: 700
+                }}
+              >
+                <Plus size={14} />
+                레이어 추가
+              </button>
+            </div>
+
+            <DragOverlay>
+              {activeLayer ? (
+                <div
+                  style={{
+                    width: '100%',
+                    opacity: 0.9,
+                    boxShadow: 'var(--shadow-lg)',
+                    borderRadius: 'var(--radius-lg)',
+                    pointerEvents: 'none'
+                  }}
+                >
+                  <RGBLayerCell
+                    layer={activeLayer}
+                    thicknessMode={thicknessMode}
+                    scaleFactor={scaleFactor}
+                    isSelected={false}
+                    onSelect={() => undefined}
+                    showLabel
+                  />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
         )}
       </div>
 
