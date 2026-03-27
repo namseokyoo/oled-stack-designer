@@ -240,6 +240,8 @@ interface StackStore {
   undo: () => void
   redo: () => void
   pushHistory: (description: string) => void
+  lastAutosaveTime: Date | null
+  setLastAutosaveTime: (time: Date | null) => void
 }
 
 function generateId(): string {
@@ -442,6 +444,9 @@ export const useStackStore = create<StackStore>((set) => ({
   isDirty: false,
   history: [],
   historyIndex: -1,
+  lastAutosaveTime: null,
+
+  setLastAutosaveTime: (time) => set({ lastAutosaveTime: time }),
 
   selectLayer: (id) =>
     set((state) => {
@@ -937,9 +942,18 @@ export const useStackStore = create<StackStore>((set) => ({
       }
 
       const baseDevice = state.devices[0]
+      const existingNames = new Set(state.devices.map((d) => d.name))
+      let newDeviceName = `Device ${String.fromCharCode(65 + state.devices.length)}`
+      for (let i = 0; i < 4; i++) {
+        const candidate = `Device ${String.fromCharCode(65 + i)}`
+        if (!existingNames.has(candidate)) {
+          newDeviceName = candidate
+          break
+        }
+      }
       const newDevice: Device = {
         id: `device-${Date.now()}`,
-        name: `Device ${String.fromCharCode(65 + state.devices.length)}`,
+        name: newDeviceName,
         layers: baseDevice ? cloneLayers(baseDevice.layers) : []
       }
       const devices = [...state.devices, newDevice]

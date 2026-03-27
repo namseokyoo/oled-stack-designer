@@ -26,6 +26,7 @@ export function App() {
   const [showAbout, setShowAbout] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [backupMtimeMs, setBackupMtimeMs] = useState(0)
+  const [autosaveFilePath, setAutosaveFilePath] = useState<string | null>(null)
 
   const { saveProject, saveProjectAs, loadProject, newProject } = useFileOperations()
   useAutoBackup()
@@ -34,17 +35,30 @@ export function App() {
   useEffect(() => {
     let mounted = true
 
-    void window.oledApi
-      .checkBackup()
-      .then(({ exists, mtimeMs }) => {
-        if (!mounted || !exists) {
-          return
-        }
+    const checkForRecovery = async () => {
+      // 1. temp backup 체크 (비정상 종료)
+      const { exists, mtimeMs } = await window.oledApi.checkBackup()
+      if (!mounted) return
 
+      if (exists) {
         setBackupMtimeMs(mtimeMs)
         setShowRecovery(true)
-      })
-      .catch(() => undefined)
+        return
+      }
+
+      // 2. autosave 파일 체크
+      const autosaves = await window.oledApi.autosaveList()
+      if (!mounted) return
+
+      const latest = autosaves[0]
+      if (latest) {
+        setBackupMtimeMs(latest.timestamp)
+        setAutosaveFilePath(latest.filePath)
+        setShowRecovery(true)
+      }
+    }
+
+    void checkForRecovery().catch(() => undefined)
 
     return () => {
       mounted = false
@@ -122,14 +136,29 @@ export function App() {
 
   const handleRecover = async () => {
     try {
-      const content = await window.oledApi.loadBackup()
-      if (!content) {
+      let fileContent: string | null = null
+
+      if (autosaveFilePath) {
+        // autosave 파일 복구
+        fileContent = await window.oledApi.autosaveLoad(autosaveFilePath)
+        if (fileContent) {
+          await window.oledApi.autosaveDelete(autosaveFilePath)
+          setAutosaveFilePath(null)
+        }
+      } else {
+        // temp backup 복구
+        fileContent = await window.oledApi.loadBackup()
+        if (fileContent) {
+          await window.oledApi.deleteBackup()
+        }
+      }
+
+      if (!fileContent) {
         return
       }
 
-      const parsed = JSON.parse(content) as Project
+      const parsed = JSON.parse(fileContent) as Project
       useStackStore.getState().loadProjectFromData(parsed)
-      await window.oledApi.deleteBackup()
       setShowRecovery(false)
     } catch {
       return
@@ -137,7 +166,12 @@ export function App() {
   }
 
   const handleDismiss = async () => {
-    await window.oledApi.deleteBackup()
+    if (autosaveFilePath) {
+      await window.oledApi.autosaveDelete(autosaveFilePath)
+      setAutosaveFilePath(null)
+    } else {
+      await window.oledApi.deleteBackup()
+    }
     setShowRecovery(false)
   }
 

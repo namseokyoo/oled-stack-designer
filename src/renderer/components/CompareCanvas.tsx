@@ -1,5 +1,22 @@
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useStackStore } from '../stores/useStackStore'
 import type { Device, Layer } from '../types'
 import { EmptyState } from './EmptyState'
@@ -67,7 +84,11 @@ function getDiffStatus(
     return 'added'
   }
 
-  if (layer.thickness !== baseLayer.thickness || layer.material !== baseLayer.material) {
+  if (
+    layer.thickness !== baseLayer.thickness ||
+    layer.material !== baseLayer.material ||
+    layer.customColor !== baseLayer.customColor
+  ) {
     return 'changed'
   }
 
@@ -235,6 +256,28 @@ function AddDeviceCard({ onAdd }: { onAdd: () => void }) {
   )
 }
 
+interface SortableLayerItemProps {
+  id: string
+  children: (dragHandleProps: React.HTMLAttributes<HTMLElement>) => React.ReactNode
+}
+
+function SortableLayerItem({ id, children }: SortableLayerItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    position: 'relative'
+  }
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children({ ...attributes, ...listeners })}
+    </div>
+  )
+}
+
 interface DeviceCardProps {
   device: Device
   accent: string
@@ -248,6 +291,7 @@ interface DeviceCardProps {
   onSelectLayer: (layerId: string) => void
   canRemove: boolean
   onRemove: () => void
+  onUpdateLayers: (deviceId: string, layers: Layer[]) => void
 }
 
 function DeviceCard({
@@ -262,8 +306,26 @@ function DeviceCard({
   onSelectDevice,
   onSelectLayer,
   canRemove,
-  onRemove
+  onRemove,
+  onUpdateLayers
 }: DeviceCardProps) {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = device.layers.findIndex((l) => l.id === active.id)
+    const newIndex = device.layers.findIndex((l) => l.id === over.id)
+    if (oldIndex !== -1 && newIndex !== -1) {
+      onUpdateLayers(device.id, arrayMove(device.layers, oldIndex, newIndex))
+    }
+  }
+
+  const layerIds = device.layers.map((l) => l.id)
+
   return (
     <div
       style={{
@@ -346,32 +408,38 @@ function DeviceCard({
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {unifiedLayers.map((entry) => {
-          const layer = findLayer(device, entry.role, entry.name)
-          const baseLayer = findLayer(baseDevice, entry.role, entry.name)
-          const diffStatus = getDiffStatus(layer, baseLayer, isBaseDevice)
-          const leftBarColor =
-            diffStatus === 'changed'
-              ? CHANGED_ACCENT
-              : diffStatus === 'added'
-                ? ADDED_ACCENT
-                : 'transparent'
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={isActive ? handleDragEnd : undefined}
+      >
+        <SortableContext items={layerIds} strategy={verticalListSortingStrategy}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {unifiedLayers.map((entry) => {
+              const layer = findLayer(device, entry.role, entry.name)
+              const baseLayer = findLayer(baseDevice, entry.role, entry.name)
+              const diffStatus = getDiffStatus(layer, baseLayer, isBaseDevice)
+              const leftBarColor =
+                diffStatus === 'changed'
+                  ? CHANGED_ACCENT
+                  : diffStatus === 'added'
+                    ? ADDED_ACCENT
+                    : 'transparent'
 
-          if (!layer) {
-            return <EmptyLayerBlock key={`${device.id}-${entry.role}-${entry.name}`} />
-          }
+              if (!layer) {
+                return <EmptyLayerBlock key={`${device.id}-${entry.role}-${entry.name}`} />
+              }
 
-          const isSelected = isActive && selectedLayerId === layer.id
-
-          return (
-            <button
-              key={`${device.id}-${entry.role}-${entry.name}`}
-              type="button"
-              onClick={() => {
-                onSelectDevice()
-                onSelectLayer(layer.id)
-              }}
+              const isSelected = isActive && selectedLayerId === layer.id
+              const layerButton = (dragProps: React.HTMLAttributes<HTMLElement> = {}) => (
+                <button
+                  key={`${device.id}-${entry.role}-${entry.name}`}
+                  type="button"
+                  onClick={() => {
+                    onSelectDevice()
+                    onSelectLayer(layer.id)
+                  }}
+                  {...(isActive ? dragProps : {})}
               style={{
                 position: 'relative',
                 height: 52,
@@ -388,70 +456,82 @@ function DeviceCard({
                 overflow: 'hidden',
                 color: 'var(--layer-text-primary)'
               }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: 3,
-                  background: leftBarColor
-                }}
-              />
-              <div
-                style={{
-                  width: 8,
-                  height: 24,
-                  borderRadius: 999,
-                  background: 'color-mix(in oklab, black 18%, transparent)',
-                  border: '1px solid color-mix(in oklab, white 24%, transparent)',
-                  flexShrink: 0
-                }}
-              />
-              <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    textShadow: '0 1px 2px var(--layer-action-bg)'
-                  }}
                 >
-                  {layer.name}
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontFamily: 'var(--font-mono)',
-                    color: 'var(--layer-text-secondary)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                >
-                  {layer.material || 'No material'}
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: 700,
-                    textShadow: '0 1px 2px var(--layer-action-bg)'
-                  }}
-                >
-                  {layer.thickness} nm
-                </span>
-                <DiffBadge status={diffStatus} />
-              </div>
-            </button>
-          )
-        })}
-      </div>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 3,
+                      background: leftBarColor
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: 8,
+                      height: 24,
+                      borderRadius: 999,
+                      background: 'color-mix(in oklab, black 18%, transparent)',
+                      border: '1px solid color-mix(in oklab, white 24%, transparent)',
+                      flexShrink: 0
+                    }}
+                  />
+                  <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        textShadow: '0 1px 2px var(--layer-action-bg)'
+                      }}
+                    >
+                      {layer.name}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontFamily: 'var(--font-mono)',
+                        color: 'var(--layer-text-secondary)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {layer.material || 'No material'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <span
+                      style={{
+                        fontSize: 11,
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        textShadow: '0 1px 2px var(--layer-action-bg)'
+                      }}
+                    >
+                      {layer.thickness} nm
+                    </span>
+                    <DiffBadge status={diffStatus} />
+                  </div>
+                </button>
+              )
+
+              if (isActive) {
+                return (
+                  <SortableLayerItem key={`${device.id}-${entry.role}-${entry.name}`} id={layer.id}>
+                    {(dragProps) => layerButton(dragProps)}
+                  </SortableLayerItem>
+                )
+              }
+
+              return layerButton()
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
     </div>
   )
 }
@@ -465,6 +545,7 @@ export function CompareCanvas({ onOpenExamples }: CompareCanvasProps) {
   const setActiveDevice = useStackStore((state) => state.setActiveDevice)
   const selectLayer = useStackStore((state) => state.selectLayer)
   const removeLayer = useStackStore((state) => state.removeLayer)
+  const updateDeviceLayers = useStackStore((state) => state.updateDeviceLayers)
 
   const activeDevice = devices.find((device) => device.id === activeDeviceId) ?? devices[0] ?? null
 
@@ -543,6 +624,7 @@ export function CompareCanvas({ onOpenExamples }: CompareCanvasProps) {
                 onSelectLayer={selectLayer}
                 canRemove={devices.length > 2}
                 onRemove={() => removeDevice(device.id)}
+                onUpdateLayers={updateDeviceLayers}
               />
             </div>
           )

@@ -1,6 +1,6 @@
 {
   "name": "oled-stack-designer",
-  "version": "1.1.0",
+  "version": "1.5.0",
   "private": true,
   "description": "OLED layer stack visualization and editing tool",
   "main": "out/main/index.js",
@@ -28,14 +28,18 @@
       {
         "from": "resources/examples",
         "to": "resources/examples",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico"
@@ -50,6 +54,10 @@
     "mac": {
       "target": "dmg",
       "icon": "build/icon.icns"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png"
     }
   },
   "devDependencies": {

@@ -35,6 +35,7 @@ function readBlobAsBase64(blob: Blob): Promise<string> {
 
 export function ExportDialog({ onClose }: ExportDialogProps) {
   const layers = useStackStore((state) => state.project.stacks[0]?.layers ?? [])
+  const devices = useStackStore((state) => state.devices)
   const palette = useStackStore((state) => state.project.palette)
   const structureMode = useStackStore((state) => state.project.structureMode)
   const thicknessMode = useStackStore((state) => state.thicknessMode)
@@ -44,8 +45,11 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
   const [background, setBackground] = useState<ExportBackground>('dark')
   const [isExporting, setIsExporting] = useState(false)
 
+  const isCompareMode = structureMode === 'compare'
+  const isEmpty = isCompareMode ? devices.length === 0 : layers.length === 0
+
   const handleExport = async () => {
-    if (isExporting || layers.length === 0) {
+    if (isExporting || isEmpty || isCompareMode) {
       return
     }
 
@@ -256,6 +260,19 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
           </div>
         </div>
 
+        {isCompareMode ? (
+          <div
+            style={{
+              padding: '10px 20px 0',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+              lineHeight: 1.5
+            }}
+          >
+            Compare 모드 직접 내보내기는 v1.6에서 지원됩니다.
+            현재는 OS 스크린샷 기능(⌘⇧4)을 이용해 주세요.
+          </div>
+        ) : null}
         <div
           style={{
             padding: '14px 20px',
@@ -285,7 +302,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
             onClick={() => {
               void handleExport()
             }}
-            disabled={isExporting || layers.length === 0}
+            disabled={isExporting || isEmpty || isCompareMode}
             style={{
               padding: '8px 16px',
               borderRadius: 'var(--radius-md)',

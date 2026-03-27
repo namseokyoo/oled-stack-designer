@@ -20,6 +20,10 @@ export interface OledApi {
   cancelClose: () => Promise<void>
   onBeforeClose: (callback: () => void | Promise<void>) => () => void
   onMenuCommand: (callback: (command: string, payload?: string) => void) => () => void
+  autosaveSave: (content: string) => Promise<string>
+  autosaveList: () => Promise<Array<{ filePath: string; timestamp: number }>>
+  autosaveLoad: (filePath: string) => Promise<string | null>
+  autosaveDelete: (filePath: string) => Promise<void>
 }
 
 const oledApi: OledApi = {
@@ -48,6 +52,10 @@ const oledApi: OledApi = {
     ipcRenderer.on('app:before-close', handler)
     return () => ipcRenderer.removeListener('app:before-close', handler)
   },
+  autosaveSave: (content) => ipcRenderer.invoke('autosave:save', content),
+  autosaveList: () => ipcRenderer.invoke('autosave:list'),
+  autosaveLoad: (filePath) => ipcRenderer.invoke('autosave:load', filePath),
+  autosaveDelete: (filePath) => ipcRenderer.invoke('autosave:delete', filePath),
   onMenuCommand: (callback) => {
     const menuEvents = [
       'menu:new-project',

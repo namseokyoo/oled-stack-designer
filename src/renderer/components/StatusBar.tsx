@@ -11,6 +11,7 @@ export function StatusBar() {
   const redo = useStackStore((state) => state.redo)
   const history = useStackStore((state) => state.history)
   const historyIndex = useStackStore((state) => state.historyIndex)
+  const lastAutosaveTime = useStackStore((state) => state.lastAutosaveTime)
   const canUndo = historyIndex > 0
   const canRedo = historyIndex < history.length - 1
 
@@ -35,6 +36,11 @@ export function StatusBar() {
       <span>Total <strong style={{ color: 'var(--text-primary)' }}>{totalThickness} nm</strong></span>
       <span>팔레트 {palette}</span>
       {isDirty ? <span style={{ color: 'var(--accent-active)' }}>● 미저장</span> : null}
+      {lastAutosaveTime ? (
+        <span style={{ color: 'var(--text-muted)' }}>
+          자동 저장됨 {lastAutosaveTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      ) : null}
       <span
         style={{
           fontFamily: 'var(--font-mono)',

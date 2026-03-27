@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'node:fs/promises'
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 
@@ -300,6 +300,65 @@ ipcMain.handle('app:confirm-close', () => {
 
 ipcMain.handle('app:cancel-close', () => {
   pendingClose = false
+})
+
+ipcMain.handle('autosave:save', async (_, content: string) => {
+  const dir = join(app.getPath('userData'), 'autosave')
+  await mkdir(dir, { recursive: true })
+
+  const timestamp = Date.now()
+  const filePath = join(dir, `autosave-${timestamp}.json`)
+  await writeFile(filePath, content, 'utf-8')
+
+  const files = (await readdir(dir))
+    .filter((f) => f.startsWith('autosave-') && f.endsWith('.json'))
+    .sort()
+
+  if (files.length > 3) {
+    const toDelete = files.slice(0, files.length - 3)
+    for (const f of toDelete) {
+      try {
+        await unlink(join(dir, f))
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  return filePath
+})
+
+ipcMain.handle('autosave:list', async () => {
+  try {
+    const dir = join(app.getPath('userData'), 'autosave')
+    const files = (await readdir(dir))
+      .filter((f) => f.startsWith('autosave-') && f.endsWith('.json'))
+      .sort()
+      .reverse()
+
+    return files.map((f) => ({
+      filePath: join(dir, f),
+      timestamp: parseInt(f.replace('autosave-', '').replace('.json', ''), 10)
+    }))
+  } catch {
+    return []
+  }
+})
+
+ipcMain.handle('autosave:load', async (_, filePath: string) => {
+  try {
+    return await readFile(filePath, 'utf-8')
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('autosave:delete', async (_, filePath: string) => {
+  try {
+    await unlink(filePath)
+  } catch {
+    // ignore
+  }
 })
 
 ipcMain.handle('app:examples-path', () => {
