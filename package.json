@@ -1,6 +1,6 @@
 {
   "name": "oled-stack-designer",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "OLED layer stack visualization and editing tool",
   "main": "out/main/index.js",
