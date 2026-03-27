@@ -1,6 +1,6 @@
 import { join } from 'node:path'
 import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 
 let mainWindow: BrowserWindow | null = null
@@ -13,7 +13,6 @@ function createWindow(): void {
     minWidth: 1024,
     minHeight: 768,
     show: false,
-    autoHideMenuBar: true,
     title: 'OLED Stack Designer',
     backgroundColor: '#11131a',
     webPreferences: {
@@ -42,6 +41,131 @@ function createWindow(): void {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
+
+  const menuTemplate: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: '파일',
+      submenu: [
+        {
+          label: '새 프로젝트',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => mainWindow?.webContents.send('menu:new-project')
+        },
+        {
+          label: '열기',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => mainWindow?.webContents.send('menu:open')
+        },
+        { type: 'separator' },
+        {
+          label: '저장',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => mainWindow?.webContents.send('menu:save')
+        },
+        {
+          label: '다른 이름으로 저장',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => mainWindow?.webContents.send('menu:save-as')
+        },
+        { type: 'separator' },
+        {
+          label: '내보내기',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => mainWindow?.webContents.send('menu:export')
+        },
+        { type: 'separator' },
+        { label: '종료', accelerator: 'Alt+F4', role: 'quit' }
+      ]
+    },
+    {
+      label: '편집',
+      submenu: [
+        {
+          label: '실행취소',
+          accelerator: 'CmdOrCtrl+Z',
+          registerAccelerator: false,
+          click: () => mainWindow?.webContents.send('menu:undo')
+        },
+        {
+          label: '다시실행',
+          accelerator: 'CmdOrCtrl+Y',
+          registerAccelerator: false,
+          click: () => mainWindow?.webContents.send('menu:redo')
+        },
+        { type: 'separator' },
+        {
+          label: '레이어 복제',
+          accelerator: 'CmdOrCtrl+D',
+          registerAccelerator: false,
+          click: () => mainWindow?.webContents.send('menu:duplicate')
+        },
+        {
+          label: '삭제',
+          accelerator: 'Delete',
+          registerAccelerator: false,
+          click: () => mainWindow?.webContents.send('menu:delete')
+        }
+      ]
+    },
+    {
+      label: '보기',
+      submenu: [
+        {
+          label: '구조 모드',
+          submenu: [
+            {
+              label: 'Single Stack',
+              click: () => mainWindow?.webContents.send('menu:set-structure-mode', 'single')
+            },
+            {
+              label: 'RGB 통합',
+              click: () => mainWindow?.webContents.send('menu:set-structure-mode', 'rgb')
+            }
+          ]
+        },
+        {
+          label: '두께 모드 전환',
+          click: () => mainWindow?.webContents.send('menu:toggle-thickness')
+        },
+        { type: 'separator' },
+        {
+          label: '팔레트',
+          submenu: [
+            {
+              label: 'Classic',
+              click: () => mainWindow?.webContents.send('menu:set-palette', 'classic')
+            },
+            {
+              label: 'Pastel',
+              click: () => mainWindow?.webContents.send('menu:set-palette', 'pastel')
+            },
+            {
+              label: 'Vivid',
+              click: () => mainWindow?.webContents.send('menu:set-palette', 'vivid')
+            }
+          ]
+        }
+      ]
+    },
+    {
+      label: '도움말',
+      submenu: [
+        {
+          label: '도움말',
+          accelerator: 'F1',
+          click: () => mainWindow?.webContents.send('menu:help')
+        },
+        { type: 'separator' },
+        {
+          label: '제작자 정보',
+          click: () => mainWindow?.webContents.send('menu:about')
+        }
+      ]
+    }
+  ]
+
+  const menu = Menu.buildFromTemplate(menuTemplate)
+  Menu.setApplicationMenu(menu)
 
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -84,6 +208,32 @@ ipcMain.handle('dialog:open', async () => {
   return result.canceled || !result.filePaths[0] ? null : result.filePaths[0]
 })
 
+ipcMain.handle('dialog:dirty-guard', async () => {
+  if (!mainWindow) {
+    return 'cancel'
+  }
+
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: '저장되지 않은 변경사항',
+    message: '저장되지 않은 변경사항이 있습니다.',
+    detail: '계속하기 전에 저장하시겠습니까?',
+    buttons: ['저장하고 계속', '저장하지 않고 계속', '취소'],
+    defaultId: 0,
+    cancelId: 2
+  })
+
+  if (result.response === 0) {
+    return 'save'
+  }
+
+  if (result.response === 1) {
+    return 'discard'
+  }
+
+  return 'cancel'
+})
+
 ipcMain.handle('fs:write', async (_, filePath: string, content: string) => {
   await writeFile(filePath, content, 'utf-8')
 })
@@ -108,6 +258,8 @@ ipcMain.handle('fs:unlink', async (_, filePath: string) => {
 ipcMain.handle('app:temp-path', () => {
   return join(app.getPath('temp'), 'oled-stack-designer-backup.json')
 })
+
+ipcMain.handle('app:get-version', () => app.getVersion())
 
 ipcMain.handle('app:check-backup', async () => {
   try {

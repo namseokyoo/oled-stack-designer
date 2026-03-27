@@ -51,6 +51,7 @@ function getDefaultProjectName(name: string): string {
 export function useFileOperations() {
   const serializedProject = useStackStore(selectSerializableProject)
   const currentFilePath = useStackStore((state) => state.currentFilePath)
+  const isDirty = useStackStore((state) => state.isDirty)
   const setCurrentFilePath = useStackStore((state) => state.setCurrentFilePath)
   const setDirty = useStackStore((state) => state.setDirty)
   const loadProjectFromData = useStackStore((state) => state.loadProjectFromData)
@@ -115,6 +116,20 @@ export function useFileOperations() {
   const loadProject = useCallback(
     async (filePath?: string): Promise<boolean> => {
       try {
+        if (!filePath && isDirty) {
+          const answer = await window.oledApi.showDirtyGuard()
+          if (answer === 'cancel') {
+            return false
+          }
+
+          if (answer === 'save') {
+            const saved = await saveProject()
+            if (!saved) {
+              return false
+            }
+          }
+        }
+
         const targetPath = filePath ?? (await window.oledApi.showOpenDialog())
         if (!targetPath) {
           return false
@@ -138,13 +153,27 @@ export function useFileOperations() {
         return false
       }
     },
-    [loadProjectFromData, setCurrentFilePath]
+    [isDirty, loadProjectFromData, saveProject, setCurrentFilePath]
   )
 
-  const newProject = useCallback(() => {
+  const newProject = useCallback(async (): Promise<void> => {
+    if (isDirty) {
+      const answer = await window.oledApi.showDirtyGuard()
+      if (answer === 'cancel') {
+        return
+      }
+
+      if (answer === 'save') {
+        const saved = await saveProject()
+        if (!saved) {
+          return
+        }
+      }
+    }
+
     resetToNew()
-    window.oledApi.setWindowTitle('Untitled - OLED Stack Designer').catch(() => undefined)
-  }, [resetToNew])
+    await window.oledApi.setWindowTitle('Untitled - OLED Stack Designer').catch(() => undefined)
+  }, [isDirty, resetToNew, saveProject])
 
   return { saveProject, saveProjectAs, loadProject, newProject }
 }

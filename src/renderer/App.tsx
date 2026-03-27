@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { AboutDialog } from './components/AboutDialog'
 import { Canvas } from './components/Canvas'
 import { CompareCanvas } from './components/CompareCanvas'
 import { ExamplesDialog } from './components/ExamplesDialog'
 import { ExportDialog } from './components/ExportDialog'
+import { HelpDialog } from './components/HelpDialog'
 import { PropertiesPanel } from './components/PropertiesPanel'
 import { RecoveryDialog } from './components/RecoveryDialog'
 import { StatusBar } from './components/StatusBar'
@@ -11,7 +13,7 @@ import { useAutoBackup } from './hooks/useAutoBackup'
 import { useBeforeClose } from './hooks/useBeforeClose'
 import { useFileOperations } from './hooks/useFileOperations'
 import { useStackStore } from './stores/useStackStore'
-import type { Project } from './types'
+import type { PaletteType, Project, StructureMode } from './types'
 
 export function App() {
   const palette = useStackStore((state) => state.project.palette)
@@ -21,9 +23,11 @@ export function App() {
   const [showExport, setShowExport] = useState(false)
   const [showExamples, setShowExamples] = useState(false)
   const [showRecovery, setShowRecovery] = useState(false)
+  const [showAbout, setShowAbout] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
   const [backupMtimeMs, setBackupMtimeMs] = useState(0)
 
-  const { saveProject, saveProjectAs, loadProject } = useFileOperations()
+  const { saveProject, saveProjectAs, loadProject, newProject } = useFileOperations()
   useAutoBackup()
   useBeforeClose()
 
@@ -48,40 +52,67 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const mod = event.ctrlKey || event.metaKey
-      if (!mod) {
-        return
+    const unsubscribe = window.oledApi.onMenuCommand(async (command, payload) => {
+      switch (command) {
+        case 'menu:new-project':
+          await newProject()
+          break
+        case 'menu:open':
+          await loadProject()
+          break
+        case 'menu:save':
+          await saveProject()
+          break
+        case 'menu:save-as':
+          await saveProjectAs()
+          break
+        case 'menu:export':
+          setShowExport(true)
+          break
+        case 'menu:undo':
+          useStackStore.getState().undo()
+          break
+        case 'menu:redo':
+          useStackStore.getState().redo()
+          break
+        case 'menu:duplicate': {
+          const { selectedLayerId, duplicateLayer } = useStackStore.getState()
+          if (selectedLayerId) {
+            duplicateLayer(selectedLayerId)
+          }
+          break
+        }
+        case 'menu:delete': {
+          const state = useStackStore.getState()
+          if (state.selectedLayerId) {
+            state.removeLayer(state.selectedLayerId)
+          }
+          break
+        }
+        case 'menu:set-structure-mode':
+          if (payload) {
+            useStackStore.getState().setStructureMode(payload as StructureMode)
+          }
+          break
+        case 'menu:set-palette':
+          if (payload) {
+            useStackStore.getState().setPalette(payload as PaletteType)
+          }
+          break
+        case 'menu:toggle-thickness':
+          useStackStore.getState().toggleThicknessMode()
+          break
+        case 'menu:help':
+          setShowHelp(true)
+          break
+        case 'menu:about':
+          setShowAbout(true)
+          break
       }
+    })
 
-      const key = event.key.toLowerCase()
-      if (key === 's' && !event.shiftKey) {
-        event.preventDefault()
-        void saveProject()
-        return
-      }
-
-      if (key === 's' && event.shiftKey) {
-        event.preventDefault()
-        void saveProjectAs()
-        return
-      }
-
-      if (key === 'o' && !event.shiftKey) {
-        event.preventDefault()
-        void loadProject()
-        return
-      }
-
-      if (key === 'e') {
-        event.preventDefault()
-        setShowExport(true)
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [loadProject, saveProject, saveProjectAs])
+    return unsubscribe
+  }, [loadProject, newProject, saveProject, saveProjectAs])
 
   useEffect(() => {
     const fileName = currentFilePath?.split(/[/\\]/).pop() ?? 'Untitled'
@@ -132,6 +163,8 @@ export function App() {
       </div>
       <StatusBar />
       {showExport ? <ExportDialog onClose={() => setShowExport(false)} /> : null}
+      {showAbout ? <AboutDialog onClose={() => setShowAbout(false)} /> : null}
+      {showHelp ? <HelpDialog onClose={() => setShowHelp(false)} /> : null}
       {showExamples ? (
         <ExamplesDialog
           onSelect={(filePath) => {

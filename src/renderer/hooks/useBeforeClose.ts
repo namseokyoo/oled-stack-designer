@@ -13,22 +13,22 @@ export function useBeforeClose() {
         return
       }
 
-      const answer = window.confirm(
-        '저장하지 않은 변경사항이 있습니다.\n저장하고 종료하시겠습니까?\n\n[확인] 저장 후 종료 / [취소] 종료 취소'
-      )
+      const answer = await window.oledApi.showDirtyGuard()
 
-      if (!answer) {
+      if (answer === 'cancel') {
         await window.oledApi.cancelClose()
         return
       }
 
-      const saved = await saveProject()
-      if (saved) {
-        await window.oledApi.confirmClose()
-        return
+      if (answer === 'save') {
+        const saved = await saveProject()
+        if (!saved) {
+          await window.oledApi.cancelClose()
+          return
+        }
       }
 
-      await window.oledApi.cancelClose()
+      await window.oledApi.confirmClose()
     })
 
     return unsubscribe
