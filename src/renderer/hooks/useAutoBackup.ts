@@ -1,8 +1,8 @@
 import { useCallback, useEffect } from 'react'
 import { selectSerializableProject, useStackStore } from '../stores/useStackStore'
 
-const BACKUP_INTERVAL_MS = 5 * 60 * 1000
-const AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000
+const BACKUP_INTERVAL_MS = 5 * 60 * 1000 // 비정상 종료 감지용 백업 주기
+const AUTOSAVE_INTERVAL_MS = 5 * 60 * 1000 // FIFO 자동저장 주기 (독립적으로 조정 가능)
 
 export function useAutoBackup() {
   const project = useStackStore(selectSerializableProject)
@@ -32,13 +32,17 @@ export function useAutoBackup() {
   }, [])
 
   const runAutosave = useCallback(async () => {
+    if (!isDirty) {
+      return
+    }
+
     try {
       await window.oledApi.autosaveSave(JSON.stringify(project, null, 2))
       setLastAutosaveTime(new Date())
     } catch (error) {
       console.error('[Autosave] 자동 저장 실패:', error)
     }
-  }, [project, setLastAutosaveTime])
+  }, [isDirty, project, setLastAutosaveTime])
 
   // 기존 단일 백업 (비정상 종료 감지용)
   useEffect(() => {

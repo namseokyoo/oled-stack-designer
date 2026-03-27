@@ -313,7 +313,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
               display: 'flex',
               alignItems: 'center',
               gap: 6,
-              opacity: isExporting || layers.length === 0 ? 0.6 : 1
+              opacity: isExporting || layers.length === 0 || isCompareMode ? 0.6 : 1
             }}
           >
             <Download size={14} />
