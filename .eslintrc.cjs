@@ -20,6 +20,10 @@ module.exports = {
     {
       files: ['src/**/*.ts', 'src/**/*.tsx'],
       rules: {
+        '@typescript-eslint/no-unused-vars': [
+          'error',
+          { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }
+        ],
         '@typescript-eslint/consistent-type-imports': 'error'
       }
     }
