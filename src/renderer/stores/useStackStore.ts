@@ -212,7 +212,7 @@ interface StackStore {
   history: HistoryEntry[]
   historyIndex: number
   selectLayer: (id: string | null) => void
-  addLayer: (afterId?: string) => void
+  addLayer: (afterId?: string, appliesTo?: ChannelCode[]) => void
   removeLayer: (id: string) => void
   updateLayer: (id: string, partial: Partial<Layer>) => void
   reorderLayer: (id: string, newIndex: number) => void
@@ -401,10 +401,14 @@ export const useStackStore = create<StackStore>((set) => ({
       }
     }),
 
-  addLayer: (afterId) =>
+  addLayer: (afterId, appliesTo) =>
     set((state) => {
       const stack = state.project.stacks[0]
-      const newLayer: Layer = { id: generateId(), ...DEFAULT_NEW_LAYER }
+      const newLayer: Layer = {
+        id: generateId(),
+        ...DEFAULT_NEW_LAYER,
+        appliesTo: appliesTo ? [...appliesTo] : [...DEFAULT_NEW_LAYER.appliesTo]
+      }
       const description = '레이어 추가'
       let newLayers: Layer[]
 

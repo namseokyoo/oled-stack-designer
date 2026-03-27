@@ -71,6 +71,33 @@ function getLayerIdFromSortableId(sortableId: string): string {
   return sortableId.split('::')[0] ?? sortableId
 }
 
+function splitChannelSection(channelSection: Layer[]): {
+  preCommon: Layer[]
+  fmm: Layer[]
+  postCommon: Layer[]
+} {
+  const firstSingleIdx = channelSection.findIndex((layer) => layer.appliesTo.length === 1)
+
+  if (firstSingleIdx === -1) {
+    return { preCommon: channelSection, fmm: [], postCommon: [] }
+  }
+
+  let lastSingleIdx = firstSingleIdx
+
+  for (let index = channelSection.length - 1; index >= 0; index -= 1) {
+    if (channelSection[index]?.appliesTo.length === 1) {
+      lastSingleIdx = index
+      break
+    }
+  }
+
+  return {
+    preCommon: channelSection.slice(0, firstSingleIdx),
+    fmm: channelSection.slice(firstSingleIdx, lastSingleIdx + 1),
+    postCommon: channelSection.slice(lastSingleIdx + 1)
+  }
+}
+
 interface RGBLayerCellProps {
   layer: Layer
   thicknessMode: 'uniform' | 'real'
@@ -169,7 +196,7 @@ function RGBLayerCell({
               minWidth: 0,
               position: 'relative',
               zIndex: 1,
-              flexShrink: 0
+              flexShrink: 1
             }}
           >
             {isCompact ? (
@@ -254,6 +281,7 @@ function SortableRGBLayerCell(props: SortableRGBLayerCellProps) {
 
 export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const layers = useStackStore((state) => state.project.stacks[0]?.layers ?? [])
+  const structureMode = useStackStore((state) => state.project.structureMode)
   const selectedLayerId = useStackStore((state) => state.selectedLayerId)
   const thicknessMode = useStackStore((state) => state.thicknessMode)
   const selectLayer = useStackStore((state) => state.selectLayer)
@@ -266,6 +294,7 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const [splitTarget, setSplitTarget] = useState<Layer | null>(null)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [canvasKey, setCanvasKey] = useState(0)
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -277,9 +306,11 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const lastEmlIndex = getLastEmlIndex(layers)
   const channelSection = lastEmlIndex >= 0 ? layers.slice(0, lastEmlIndex + 1) : []
   const lowerSection = lastEmlIndex >= 0 ? layers.slice(lastEmlIndex + 1) : layers
+  const { preCommon, fmm, postCommon } = splitChannelSection(channelSection)
+  const hasFmmSection = fmm.length > 0
   const sortableItems = [
     ...CHANNELS.flatMap((channel) =>
-      channelSection
+      fmm
         .filter((layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel))
         .map((layer) => getSortableId(layer.id, `channel-${channel}`))
     ),
@@ -385,6 +416,14 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
     )
   }
 
+  const renderCommonSection = (sectionLayers: Layer[]) =>
+    sectionLayers.map((layer) => (
+      <div key={layer.id} style={{ display: 'flex', flexDirection: 'column' }}>
+        {renderLowerLayer(layer)}
+        <InsertZoneWrapper afterId={layer.id} rgbMode={structureMode === 'rgb'} />
+      </div>
+    ))
+
   return (
     <main
       onClick={(event) => {
@@ -417,6 +456,7 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
           </div>
         ) : (
           <DndContext
+            key={canvasKey}
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragStart={handleDragStart}
@@ -434,17 +474,19 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
               }}
             >
               <SortableContext items={sortableItems} strategy={verticalListSortingStrategy}>
-                {channelSection.length > 0 ? (
+                {renderCommonSection(preCommon)}
+
+                {hasFmmSection ? (
                   <div
                     style={{
                       display: 'flex',
-                      alignItems: 'flex-end',
+                      alignItems: 'flex-start',
                       gap: 4,
                       width: '100%'
                     }}
                   >
                     {CHANNELS.map((channel) => {
-                      const channelLayers = channelSection.filter(
+                      const channelLayers = fmm.filter(
                         (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
                       )
 
@@ -453,6 +495,7 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                           key={channel}
                           style={{
                             flex: 1,
+                            minWidth: 0,
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 'var(--sp-2)'
@@ -492,7 +535,7 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                                   onContextMenu={(event) => handleContextMenu(event, layer.id)}
                                   showLabel={layer.appliesTo.length === 1 || channel === 'g'}
                                 />
-                                <InsertZoneWrapper afterId={layer.id} />
+                                <InsertZoneWrapper afterId={layer.id} channelMode={channel} />
                               </div>
                             ))}
                           </div>
@@ -502,10 +545,19 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                   </div>
                 ) : null}
 
+                {hasFmmSection && (postCommon.length > 0 || lowerSection.length > 0) ? (
+                  <InsertZoneWrapper
+                    afterId={fmm[fmm.length - 1]?.id}
+                    rgbMode={structureMode === 'rgb'}
+                  />
+                ) : null}
+
+                {renderCommonSection(postCommon)}
+
                 {lowerSection.map((layer) => (
                   <div key={layer.id} style={{ display: 'flex', flexDirection: 'column' }}>
                     {renderLowerLayer(layer)}
-                    <InsertZoneWrapper afterId={layer.id} />
+                    <InsertZoneWrapper afterId={layer.id} rgbMode={structureMode === 'rgb'} />
                   </div>
                 ))}
               </SortableContext>
@@ -588,6 +640,7 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
           layerName={splitTarget.name}
           onConfirm={() => {
             splitToChannels(splitTarget.id)
+            setCanvasKey((current) => current + 1)
             setSplitTarget(null)
           }}
           onCancel={() => setSplitTarget(null)}
