@@ -54,6 +54,9 @@ export function InsertZoneWrapper({ afterId, rgbMode = false, channelMode }: Ins
     handleInsert()
   }
 
+  const rect = containerRef.current?.getBoundingClientRect()
+  const popoverAbove = !rect || rect.top > 80
+
   return (
     <div
       ref={containerRef}
@@ -96,7 +99,7 @@ export function InsertZoneWrapper({ afterId, rgbMode = false, channelMode }: Ins
         <div
           style={{
             position: 'absolute',
-            bottom: '100%',
+            ...(popoverAbove ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 100,

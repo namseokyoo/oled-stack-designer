@@ -46,11 +46,15 @@ const fieldLabel: CSSProperties = {
 }
 
 export function PropertiesPanel() {
-  const layers = useStackStore((state) => state.project.stacks[0]?.layers ?? [])
-  const selectedLayerId = useStackStore((state) => state.selectedLayerId)
   const structureMode = useStackStore((state) => state.project.structureMode)
+  const projectLayers = useStackStore((state) => state.project.stacks[0]?.layers ?? [])
+  const devices = useStackStore((state) => state.devices)
+  const activeDeviceId = useStackStore((state) => state.activeDeviceId)
+  const selectedLayerId = useStackStore((state) => state.selectedLayerId)
   const updateLayer = useStackStore((state) => state.updateLayer)
 
+  const activeDevice = devices.find((device) => device.id === activeDeviceId) ?? devices[0]
+  const layers = structureMode === 'compare' ? activeDevice?.layers ?? [] : projectLayers
   const layer = layers.find((entry) => entry.id === selectedLayerId)
   const isCommon = structureMode === 'rgb' && layer?.appliesTo.length === 3
   const isLocked = layer?.locked === true
@@ -110,6 +114,20 @@ export function PropertiesPanel() {
             <p style={sectionTitle}>Layer Properties</p>
             <p style={{ fontSize: 13, fontWeight: 700 }}>{layer.name}</p>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              {structureMode === 'compare' && activeDevice ? (
+                <span
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: 'var(--radius-pill)',
+                    background: 'color-mix(in oklab, var(--accent-blue) 18%, transparent)',
+                    color: 'var(--text-primary)',
+                    fontSize: 11,
+                    fontWeight: 700
+                  }}
+                >
+                  비교 모드 — {activeDevice.name}
+                </span>
+              ) : null}
               {isCommon ? (
                 <span
                   style={{

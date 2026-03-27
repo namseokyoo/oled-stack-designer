@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Canvas } from './components/Canvas'
+import { CompareCanvas } from './components/CompareCanvas'
 import { ExamplesDialog } from './components/ExamplesDialog'
 import { ExportDialog } from './components/ExportDialog'
 import { PropertiesPanel } from './components/PropertiesPanel'
@@ -14,6 +15,7 @@ import type { Project } from './types'
 
 export function App() {
   const palette = useStackStore((state) => state.project.palette)
+  const structureMode = useStackStore((state) => state.project.structureMode)
   const currentFilePath = useStackStore((state) => state.currentFilePath)
   const isDirty = useStackStore((state) => state.isDirty)
   const [showExport, setShowExport] = useState(false)
@@ -121,7 +123,11 @@ export function App() {
     >
       <Toolbar onExport={() => setShowExport(true)} />
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <Canvas onOpenExamples={() => setShowExamples(true)} />
+        {structureMode === 'compare' ? (
+          <CompareCanvas onOpenExamples={() => setShowExamples(true)} />
+        ) : (
+          <Canvas onOpenExamples={() => setShowExamples(true)} />
+        )}
         <PropertiesPanel />
       </div>
       <StatusBar />

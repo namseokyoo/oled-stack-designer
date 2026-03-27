@@ -1,10 +1,10 @@
 import { useCallback, useEffect } from 'react'
-import { useStackStore } from '../stores/useStackStore'
+import { selectSerializableProject, useStackStore } from '../stores/useStackStore'
 
 const BACKUP_INTERVAL_MS = 5 * 60 * 1000
 
 export function useAutoBackup() {
-  const project = useStackStore((state) => state.project)
+  const project = useStackStore(selectSerializableProject)
   const isDirty = useStackStore((state) => state.isDirty)
 
   const saveBackup = useCallback(async () => {

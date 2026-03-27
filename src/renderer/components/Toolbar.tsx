@@ -1,10 +1,12 @@
 import { Download, FolderOpen, Layers3, Palette, Rows3, Save, Scaling } from 'lucide-react'
 import { useStackStore } from '../stores/useStackStore'
 import { useFileOperations } from '../hooks/useFileOperations'
+import type { StructureMode } from '../types'
 
 const STRUCTURE_OPTIONS = [
   { value: 'single', label: 'Single', enabled: true },
-  { value: 'rgb', label: 'RGB', enabled: true }
+  { value: 'rgb', label: 'RGB', enabled: true },
+  { value: 'compare', label: 'Compare', enabled: true }
 ] as const
 
 const PALETTES = ['classic', 'pastel', 'vivid'] as const
@@ -87,7 +89,7 @@ export function Toolbar({ onExport }: ToolbarProps) {
               key={option.value}
               type="button"
               disabled={!option.enabled}
-              onClick={() => option.enabled && setStructureMode(option.value)}
+              onClick={() => option.enabled && setStructureMode(option.value as StructureMode)}
               style={{
                 padding: '6px 14px',
                 borderRadius: 'var(--radius-md)',

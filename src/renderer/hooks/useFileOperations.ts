@@ -1,5 +1,9 @@
 import { useCallback } from 'react'
-import { useStackStore } from '../stores/useStackStore'
+import {
+  selectSerializableProject,
+  stripCompareState,
+  useStackStore
+} from '../stores/useStackStore'
 import type { Project } from '../types'
 
 const SCHEMA_VERSION = '1.0.0'
@@ -45,7 +49,7 @@ function getDefaultProjectName(name: string): string {
 }
 
 export function useFileOperations() {
-  const project = useStackStore((state) => state.project)
+  const serializedProject = useStackStore(selectSerializableProject)
   const currentFilePath = useStackStore((state) => state.currentFilePath)
   const setCurrentFilePath = useStackStore((state) => state.setCurrentFilePath)
   const setDirty = useStackStore((state) => state.setDirty)
@@ -57,18 +61,20 @@ export function useFileOperations() {
       let filePath = currentFilePath
 
       if (!filePath) {
-        filePath = await window.oledApi.showSaveDialog(getDefaultProjectName(project.metadata.name))
+        filePath = await window.oledApi.showSaveDialog(
+          getDefaultProjectName(serializedProject.metadata.name)
+        )
         if (!filePath) {
           return false
         }
       }
 
-      const savedProject = createSavedProject(project)
+      const savedProject = createSavedProject(serializedProject)
       await window.oledApi.writeFile(filePath, JSON.stringify(savedProject, null, 2))
       setCurrentFilePath(filePath)
       setDirty(false)
       useStackStore.setState(() => ({
-        project: savedProject,
+        project: stripCompareState(savedProject),
         thicknessMode: savedProject.thicknessMode
       }))
       await window.oledApi.setWindowTitle(`${getFileName(filePath)} - OLED Stack Designer`)
@@ -78,21 +84,23 @@ export function useFileOperations() {
       alert('프로젝트를 저장하는 중 오류가 발생했습니다.')
       return false
     }
-  }, [currentFilePath, project, setCurrentFilePath, setDirty])
+  }, [currentFilePath, serializedProject, setCurrentFilePath, setDirty])
 
   const saveProjectAs = useCallback(async (): Promise<boolean> => {
     try {
-      const filePath = await window.oledApi.showSaveDialog(getDefaultProjectName(project.metadata.name))
+      const filePath = await window.oledApi.showSaveDialog(
+        getDefaultProjectName(serializedProject.metadata.name)
+      )
       if (!filePath) {
         return false
       }
 
-      const savedProject = createSavedProject(project)
+      const savedProject = createSavedProject(serializedProject)
       await window.oledApi.writeFile(filePath, JSON.stringify(savedProject, null, 2))
       setCurrentFilePath(filePath)
       setDirty(false)
       useStackStore.setState(() => ({
-        project: savedProject,
+        project: stripCompareState(savedProject),
         thicknessMode: savedProject.thicknessMode
       }))
       await window.oledApi.setWindowTitle(`${getFileName(filePath)} - OLED Stack Designer`)
@@ -102,7 +110,7 @@ export function useFileOperations() {
       alert('프로젝트를 저장하는 중 오류가 발생했습니다.')
       return false
     }
-  }, [project, setCurrentFilePath, setDirty])
+  }, [serializedProject, setCurrentFilePath, setDirty])
 
   const loadProject = useCallback(
     async (filePath?: string): Promise<boolean> => {

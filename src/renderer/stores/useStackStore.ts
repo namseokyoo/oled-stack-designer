@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type {
   ColorToken,
   ChannelCode,
+  Device,
   Layer,
   LayerRole,
   PaletteType,
@@ -196,6 +197,8 @@ const INITIAL_PROJECT: Project = {
 interface HistorySnapshot {
   project: Project
   selectedLayerId: string | null
+  devices: Device[]
+  activeDeviceId: string | null
 }
 
 export interface HistoryEntry {
@@ -206,6 +209,8 @@ export interface HistoryEntry {
 interface StackStore {
   project: Project
   selectedLayerId: string | null
+  devices: Device[]
+  activeDeviceId: string | null
   thicknessMode: ThicknessMode
   currentFilePath: string | null
   isDirty: boolean
@@ -218,6 +223,10 @@ interface StackStore {
   reorderLayer: (id: string, newIndex: number) => void
   duplicateLayer: (id: string) => void
   lockLayer: (id: string, locked: boolean) => void
+  addDevice: () => void
+  removeDevice: (id: string) => void
+  updateDeviceLayers: (id: string, layers: Layer[]) => void
+  setActiveDevice: (id: string) => void
   splitToChannels: (id: string) => void
   mergeToCommon: (ids: string[]) => void
   setPalette: (palette: PaletteType) => void
@@ -263,11 +272,24 @@ function cloneLayers(layers: Layer[]): Layer[] {
   return layers.map((layer) => cloneLayer(layer))
 }
 
-function cloneProject(project: Project): Project {
+function cloneDevice(device: Device): Device {
   return {
-    ...project,
-    metadata: { ...project.metadata },
-    stacks: project.stacks.map((stack) => ({
+    ...device,
+    layers: cloneLayers(device.layers)
+  }
+}
+
+function cloneDevices(devices: Device[]): Device[] {
+  return devices.map((device) => cloneDevice(device))
+}
+
+function cloneProject(project: Project): Project {
+  const { devices: _devices, activeDeviceId: _activeDeviceId, ...rest } = project
+
+  return {
+    ...rest,
+    metadata: { ...rest.metadata },
+    stacks: rest.stacks.map((stack) => ({
       ...stack,
       layers: cloneLayers(stack.layers)
     }))
@@ -313,8 +335,33 @@ function touch(project: Project): Project {
   }
 }
 
-function createSnapshot(project: Project, selectedLayerId: string | null): HistorySnapshot {
-  return { project, selectedLayerId }
+function resolveActiveDeviceState(
+  state: Pick<StackStore, 'devices' | 'activeDeviceId'>
+): { device: Device | null; index: number; activeDeviceId: string | null } {
+  if (state.devices.length === 0) {
+    return { device: null, index: -1, activeDeviceId: null }
+  }
+
+  const currentIndex = state.activeDeviceId
+    ? state.devices.findIndex((device) => device.id === state.activeDeviceId)
+    : -1
+  const index = currentIndex >= 0 ? currentIndex : 0
+  const device = state.devices[index] ?? null
+
+  return {
+    device,
+    index,
+    activeDeviceId: device?.id ?? null
+  }
+}
+
+function createSnapshot(
+  project: Project,
+  selectedLayerId: string | null,
+  devices: Device[],
+  activeDeviceId: string | null
+): HistorySnapshot {
+  return { project, selectedLayerId, devices, activeDeviceId }
 }
 
 function syncCurrentSnapshot(
@@ -339,11 +386,19 @@ function syncCurrentSnapshot(
 }
 
 function commitTrackedChange(
-  state: Pick<StackStore, 'project' | 'selectedLayerId' | 'history' | 'historyIndex'>,
+  state: Pick<
+    StackStore,
+    'project' | 'selectedLayerId' | 'devices' | 'activeDeviceId' | 'history' | 'historyIndex'
+  >,
   nextSnapshot: HistorySnapshot,
   description: string
 ): Pick<StackStore, 'history' | 'historyIndex'> {
-  const currentSnapshot = createSnapshot(state.project, state.selectedLayerId)
+  const currentSnapshot = createSnapshot(
+    state.project,
+    state.selectedLayerId,
+    state.devices,
+    state.activeDeviceId
+  )
   const timeline =
     state.historyIndex >= 0 ? [...state.history.slice(0, state.historyIndex + 1)] : []
 
@@ -380,6 +435,8 @@ const DEFAULT_NEW_LAYER: Omit<Layer, 'id'> = {
 export const useStackStore = create<StackStore>((set) => ({
   project: cloneProject(INITIAL_PROJECT),
   selectedLayerId: null,
+  devices: [],
+  activeDeviceId: null,
   thicknessMode: INITIAL_PROJECT.thicknessMode,
   currentFilePath: null,
   isDirty: false,
@@ -392,7 +449,7 @@ export const useStackStore = create<StackStore>((set) => ({
       const syncedHistory = syncCurrentSnapshot(
         state.history,
         state.historyIndex,
-        createSnapshot(state.project, selectedLayerId)
+        createSnapshot(state.project, selectedLayerId, state.devices, state.activeDeviceId)
       )
 
       return {
@@ -403,6 +460,56 @@ export const useStackStore = create<StackStore>((set) => ({
 
   addLayer: (afterId, appliesTo) =>
     set((state) => {
+      if (state.project.structureMode === 'compare') {
+        const { device, index, activeDeviceId } = resolveActiveDeviceState(state)
+
+        if (!device) {
+          return state
+        }
+
+        const newLayer: Layer = {
+          id: generateId(),
+          ...DEFAULT_NEW_LAYER,
+          appliesTo: appliesTo ? [...appliesTo] : [...DEFAULT_NEW_LAYER.appliesTo]
+        }
+        const description = '레이어 추가'
+        let newLayers: Layer[]
+
+        if (afterId) {
+          const layerIndex = device.layers.findIndex((layer) => layer.id === afterId)
+          newLayers =
+            layerIndex >= 0
+              ? [
+                  ...device.layers.slice(0, layerIndex + 1),
+                  newLayer,
+                  ...device.layers.slice(layerIndex + 1)
+                ]
+              : [...device.layers, newLayer]
+        } else {
+          newLayers = [...device.layers, newLayer]
+        }
+
+        const devices = state.devices.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, layers: newLayers } : entry
+        )
+        const project = touch({ ...state.project })
+        const selectedLayerId = newLayer.id
+
+        return {
+          project,
+          selectedLayerId,
+          devices,
+          activeDeviceId,
+          thicknessMode: project.thicknessMode,
+          isDirty: true,
+          ...commitTrackedChange(
+            state,
+            createSnapshot(project, selectedLayerId, devices, activeDeviceId),
+            description
+          )
+        }
+      }
+
       const stack = state.project.stacks[0]
       const newLayer: Layer = {
         id: generateId(),
@@ -439,7 +546,7 @@ export const useStackStore = create<StackStore>((set) => ({
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, selectedLayerId),
+          createSnapshot(project, selectedLayerId, state.devices, state.activeDeviceId),
           description
         )
       }
@@ -447,6 +554,41 @@ export const useStackStore = create<StackStore>((set) => ({
 
   removeLayer: (id) =>
     set((state) => {
+      if (state.project.structureMode === 'compare') {
+        const { device, index, activeDeviceId } = resolveActiveDeviceState(state)
+
+        if (!device) {
+          return state
+        }
+
+        const targetLayer = device.layers.find((layer) => layer.id === id)
+
+        if (!targetLayer || targetLayer.locked) {
+          return state
+        }
+
+        const newLayers = device.layers.filter((layer) => layer.id !== id)
+        const devices = state.devices.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, layers: newLayers } : entry
+        )
+        const project = touch({ ...state.project })
+        const selectedLayerId = state.selectedLayerId === id ? null : state.selectedLayerId
+
+        return {
+          project,
+          selectedLayerId,
+          devices,
+          activeDeviceId,
+          thicknessMode: project.thicknessMode,
+          isDirty: true,
+          ...commitTrackedChange(
+            state,
+            createSnapshot(project, selectedLayerId, devices, activeDeviceId),
+            `레이어 삭제: ${targetLayer.name}`
+          )
+        }
+      }
+
       const stack = state.project.stacks[0]
       const targetLayer = stack.layers.find((layer) => layer.id === id)
 
@@ -468,7 +610,7 @@ export const useStackStore = create<StackStore>((set) => ({
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, selectedLayerId),
+          createSnapshot(project, selectedLayerId, state.devices, state.activeDeviceId),
           `레이어 삭제: ${targetLayer.name}`
         )
       }
@@ -476,6 +618,51 @@ export const useStackStore = create<StackStore>((set) => ({
 
   updateLayer: (id, partial) =>
     set((state) => {
+      if (state.project.structureMode === 'compare') {
+        const { device, index, activeDeviceId } = resolveActiveDeviceState(state)
+
+        if (!device) {
+          return state
+        }
+
+        const currentLayer = device.layers.find((layer) => layer.id === id)
+
+        if (!currentLayer || currentLayer.locked) {
+          return state
+        }
+
+        const newLayers = device.layers.map((layer) => {
+          if (layer.id !== id) {
+            return layer
+          }
+
+          const updatedLayer: Layer = { ...layer, ...partial }
+
+          if (partial.role && !updatedLayer.customColor) {
+            updatedLayer.colorToken = roleToColorToken[partial.role]
+          }
+
+          return updatedLayer
+        })
+        const devices = state.devices.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, layers: newLayers } : entry
+        )
+        const project = touch({ ...state.project })
+
+        return {
+          project,
+          devices,
+          activeDeviceId,
+          thicknessMode: project.thicknessMode,
+          isDirty: true,
+          ...commitTrackedChange(
+            state,
+            createSnapshot(project, state.selectedLayerId, devices, activeDeviceId),
+            `레이어 편집: ${currentLayer.name}`
+          )
+        }
+      }
+
       const stack = state.project.stacks[0]
       const currentLayer = stack.layers.find((layer) => layer.id === id)
 
@@ -508,7 +695,7 @@ export const useStackStore = create<StackStore>((set) => ({
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, state.selectedLayerId),
+          createSnapshot(project, state.selectedLayerId, state.devices, state.activeDeviceId),
           `레이어 편집: ${currentLayer.name}`
         )
       }
@@ -516,6 +703,48 @@ export const useStackStore = create<StackStore>((set) => ({
 
   reorderLayer: (id, newIndex) =>
     set((state) => {
+      if (state.project.structureMode === 'compare') {
+        const { device, index, activeDeviceId } = resolveActiveDeviceState(state)
+
+        if (!device) {
+          return state
+        }
+
+        const currentIndex = device.layers.findIndex((layer) => layer.id === id)
+
+        if (currentIndex < 0 || currentIndex === newIndex) {
+          return state
+        }
+
+        const boundedIndex = Math.max(0, Math.min(device.layers.length - 1, newIndex))
+        const newLayers = [...device.layers]
+        const [movedLayer] = newLayers.splice(currentIndex, 1)
+
+        if (!movedLayer || movedLayer.locked) {
+          return state
+        }
+
+        newLayers.splice(boundedIndex, 0, movedLayer)
+
+        const devices = state.devices.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, layers: newLayers } : entry
+        )
+        const project = touch({ ...state.project })
+
+        return {
+          project,
+          devices,
+          activeDeviceId,
+          thicknessMode: project.thicknessMode,
+          isDirty: true,
+          ...commitTrackedChange(
+            state,
+            createSnapshot(project, state.selectedLayerId, devices, activeDeviceId),
+            '순서 변경'
+          )
+        }
+      }
+
       const stack = state.project.stacks[0]
       const currentIndex = stack.layers.findIndex((layer) => layer.id === id)
 
@@ -542,12 +771,59 @@ export const useStackStore = create<StackStore>((set) => ({
         project,
         thicknessMode: project.thicknessMode,
         isDirty: true,
-        ...commitTrackedChange(state, createSnapshot(project, state.selectedLayerId), '순서 변경')
+        ...commitTrackedChange(
+          state,
+          createSnapshot(project, state.selectedLayerId, state.devices, state.activeDeviceId),
+          '순서 변경'
+        )
       }
     }),
 
   duplicateLayer: (id) =>
     set((state) => {
+      if (state.project.structureMode === 'compare') {
+        const { device, index, activeDeviceId } = resolveActiveDeviceState(state)
+
+        if (!device) {
+          return state
+        }
+
+        const layerIndex = device.layers.findIndex((layer) => layer.id === id)
+        const targetLayer = device.layers[layerIndex]
+
+        if (!targetLayer) {
+          return state
+        }
+
+        const duplicatedLayer: Layer = {
+          ...cloneLayer(targetLayer),
+          id: generateId(),
+          name: `${targetLayer.name} (copy)`
+        }
+        const newLayers = [...device.layers]
+        newLayers.splice(layerIndex + 1, 0, duplicatedLayer)
+
+        const devices = state.devices.map((entry, entryIndex) =>
+          entryIndex === index ? { ...entry, layers: newLayers } : entry
+        )
+        const project = touch({ ...state.project })
+        const selectedLayerId = duplicatedLayer.id
+
+        return {
+          project,
+          selectedLayerId,
+          devices,
+          activeDeviceId,
+          thicknessMode: project.thicknessMode,
+          isDirty: true,
+          ...commitTrackedChange(
+            state,
+            createSnapshot(project, selectedLayerId, devices, activeDeviceId),
+            `레이어 복제: ${targetLayer.name}`
+          )
+        }
+      }
+
       const stack = state.project.stacks[0]
       const layerIndex = stack.layers.findIndex((layer) => layer.id === id)
       const targetLayer = stack.layers[layerIndex]
@@ -578,7 +854,7 @@ export const useStackStore = create<StackStore>((set) => ({
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, selectedLayerId),
+          createSnapshot(project, selectedLayerId, state.devices, state.activeDeviceId),
           `레이어 복제: ${targetLayer.name}`
         )
       }
@@ -586,6 +862,43 @@ export const useStackStore = create<StackStore>((set) => ({
 
   lockLayer: (id, locked) =>
     set((state) => {
+      if (state.project.structureMode === 'compare') {
+        const { device, index, activeDeviceId } = resolveActiveDeviceState(state)
+
+        if (!device) {
+          return state
+        }
+
+        const targetLayer = device.layers.find((layer) => layer.id === id)
+
+        if (!targetLayer || targetLayer.locked === locked) {
+          return state
+        }
+
+        const devices = state.devices.map((entry, entryIndex) =>
+          entryIndex === index
+            ? {
+                ...entry,
+                layers: entry.layers.map((layer) => (layer.id === id ? { ...layer, locked } : layer))
+              }
+            : entry
+        )
+        const project = touch({ ...state.project })
+
+        return {
+          project,
+          devices,
+          activeDeviceId,
+          thicknessMode: project.thicknessMode,
+          isDirty: true,
+          ...commitTrackedChange(
+            state,
+            createSnapshot(project, state.selectedLayerId, devices, activeDeviceId),
+            locked ? `레이어 잠금: ${targetLayer.name}` : `레이어 잠금 해제: ${targetLayer.name}`
+          )
+        }
+      }
+
       const stack = state.project.stacks[0]
       const targetLayer = stack.layers.find((layer) => layer.id === id)
 
@@ -611,9 +924,120 @@ export const useStackStore = create<StackStore>((set) => ({
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, state.selectedLayerId),
+          createSnapshot(project, state.selectedLayerId, state.devices, state.activeDeviceId),
           locked ? `레이어 잠금: ${targetLayer.name}` : `레이어 잠금 해제: ${targetLayer.name}`
         )
+      }
+    }),
+
+  addDevice: () =>
+    set((state) => {
+      if (state.devices.length >= 4) {
+        return state
+      }
+
+      const baseDevice = state.devices[0]
+      const newDevice: Device = {
+        id: `device-${Date.now()}`,
+        name: `Device ${String.fromCharCode(65 + state.devices.length)}`,
+        layers: baseDevice ? cloneLayers(baseDevice.layers) : []
+      }
+      const devices = [...state.devices, newDevice]
+      const activeDeviceId = state.activeDeviceId ?? devices[0]?.id ?? null
+      const project = touch({ ...state.project })
+
+      return {
+        project,
+        devices,
+        activeDeviceId,
+        isDirty: true,
+        ...commitTrackedChange(
+          state,
+          createSnapshot(project, state.selectedLayerId, devices, activeDeviceId),
+          `비교 대상 추가: ${newDevice.name}`
+        )
+      }
+    }),
+
+  removeDevice: (id) =>
+    set((state) => {
+      if (state.devices.length <= 2) {
+        return state
+      }
+
+      const removedDevice = state.devices.find((device) => device.id === id)
+
+      if (!removedDevice) {
+        return state
+      }
+
+      const devices = state.devices.filter((device) => device.id !== id)
+      const activeDeviceId =
+        state.activeDeviceId === id ? (devices[0]?.id ?? null) : state.activeDeviceId
+      const project = touch({ ...state.project })
+
+      return {
+        project,
+        devices,
+        activeDeviceId,
+        isDirty: true,
+        ...commitTrackedChange(
+          state,
+          createSnapshot(project, state.selectedLayerId, devices, activeDeviceId),
+          `비교 대상 제거: ${removedDevice.name}`
+        )
+      }
+    }),
+
+  updateDeviceLayers: (id, layers) =>
+    set((state) => {
+      const devices = state.devices.map((device) =>
+        device.id === id ? { ...device, layers: cloneLayers(layers) } : device
+      )
+      const activeDevice = devices.find((device) => device.id === state.activeDeviceId)
+      const selectedLayerId =
+        activeDevice && state.selectedLayerId
+          ? activeDevice.layers.some((layer) => layer.id === state.selectedLayerId)
+            ? state.selectedLayerId
+            : null
+          : state.selectedLayerId
+      const project = touch({ ...state.project })
+
+      return {
+        project,
+        devices,
+        selectedLayerId,
+        isDirty: true,
+        ...commitTrackedChange(
+          state,
+          createSnapshot(project, selectedLayerId, devices, state.activeDeviceId),
+          '비교 레이어 업데이트'
+        )
+      }
+    }),
+
+  setActiveDevice: (id) =>
+    set((state) => {
+      const activeDevice = state.devices.find((device) => device.id === id)
+
+      if (!activeDevice || state.activeDeviceId === id) {
+        return state
+      }
+
+      const selectedLayerId =
+        state.selectedLayerId && activeDevice.layers.some((layer) => layer.id === state.selectedLayerId)
+          ? state.selectedLayerId
+          : null
+      const syncedHistory = syncCurrentSnapshot(
+        state.history,
+        state.historyIndex,
+        createSnapshot(state.project, selectedLayerId, state.devices, id)
+      )
+
+      return {
+        activeDeviceId: id,
+        selectedLayerId,
+        ...syncedHistory
       }
     }),
 
@@ -661,7 +1085,7 @@ export const useStackStore = create<StackStore>((set) => ({
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, selectedLayerId),
+          createSnapshot(project, selectedLayerId, state.devices, state.activeDeviceId),
           `개별층 분리: ${targetLayer.name}`
         )
       }
@@ -750,7 +1174,7 @@ export const useStackStore = create<StackStore>((set) => ({
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, selectedLayerId),
+          createSnapshot(project, selectedLayerId, state.devices, state.activeDeviceId),
           `공통층 병합: ${mergedLayer.name}`
         )
       }
@@ -770,7 +1194,7 @@ export const useStackStore = create<StackStore>((set) => ({
         ...syncCurrentSnapshot(
           state.history,
           state.historyIndex,
-          createSnapshot(project, state.selectedLayerId)
+          createSnapshot(project, state.selectedLayerId, state.devices, state.activeDeviceId)
         )
       }
     }),
@@ -779,6 +1203,40 @@ export const useStackStore = create<StackStore>((set) => ({
     set((state) => {
       if (state.project.structureMode === mode) {
         return state
+      }
+
+      if (mode === 'compare') {
+        const currentLayers = cloneLayers(state.project.stacks[0]?.layers ?? [])
+        const deviceA: Device = {
+          id: 'device-a',
+          name: 'Device A',
+          layers: currentLayers
+        }
+        const deviceB: Device = {
+          id: 'device-b',
+          name: 'Device B',
+          layers: cloneLayers(currentLayers)
+        }
+        const devices = [deviceA, deviceB]
+        const activeDeviceId = deviceA.id
+        const project = touch({
+          ...state.project,
+          structureMode: mode
+        })
+        const selectedLayerId = null
+
+        return {
+          project,
+          selectedLayerId,
+          devices,
+          activeDeviceId,
+          isDirty: true,
+          ...commitTrackedChange(
+            state,
+            createSnapshot(project, selectedLayerId, devices, activeDeviceId),
+            '구조 모드 전환: Compare'
+          )
+        }
       }
 
       const stack = state.project.stacks[0]
@@ -797,11 +1255,13 @@ export const useStackStore = create<StackStore>((set) => ({
       return {
         project,
         selectedLayerId,
+        devices: [],
+        activeDeviceId: null,
         thicknessMode: project.thicknessMode,
         isDirty: true,
         ...commitTrackedChange(
           state,
-          createSnapshot(project, selectedLayerId),
+          createSnapshot(project, selectedLayerId, [], null),
           mode === 'rgb' ? '구조 모드 전환: RGB' : '구조 모드 전환: Single'
         )
       }
@@ -821,7 +1281,7 @@ export const useStackStore = create<StackStore>((set) => ({
         ...syncCurrentSnapshot(
           state.history,
           state.historyIndex,
-          createSnapshot(project, state.selectedLayerId)
+          createSnapshot(project, state.selectedLayerId, state.devices, state.activeDeviceId)
         )
       }
     }),
@@ -841,7 +1301,7 @@ export const useStackStore = create<StackStore>((set) => ({
         ...syncCurrentSnapshot(
           state.history,
           state.historyIndex,
-          createSnapshot(project, state.selectedLayerId)
+          createSnapshot(project, state.selectedLayerId, state.devices, state.activeDeviceId)
         )
       }
     }),
@@ -859,10 +1319,21 @@ export const useStackStore = create<StackStore>((set) => ({
   loadProjectFromData: (project) =>
     set(() => {
       const nextProject = cloneProject(project)
+      const nextDevices =
+        project.structureMode === 'compare' && Array.isArray(project.devices)
+          ? cloneDevices(project.devices)
+          : []
+      const requestedActiveDeviceId = project.activeDeviceId ?? null
+      const activeDeviceId =
+        nextDevices.find((device) => device.id === requestedActiveDeviceId)?.id ??
+        nextDevices[0]?.id ??
+        null
 
       return {
         project: nextProject,
         selectedLayerId: null,
+        devices: nextDevices,
+        activeDeviceId,
         thicknessMode: nextProject.thicknessMode,
         currentFilePath: null,
         isDirty: false,
@@ -878,6 +1349,8 @@ export const useStackStore = create<StackStore>((set) => ({
       return {
         project: nextProject,
         selectedLayerId: null,
+        devices: [],
+        activeDeviceId: null,
         thicknessMode: nextProject.thicknessMode,
         currentFilePath: null,
         isDirty: false,
@@ -902,6 +1375,8 @@ export const useStackStore = create<StackStore>((set) => ({
       return {
         project: snapshot.project,
         selectedLayerId: snapshot.selectedLayerId,
+        devices: snapshot.devices,
+        activeDeviceId: snapshot.activeDeviceId,
         thicknessMode: snapshot.project.thicknessMode,
         isDirty: true,
         historyIndex
@@ -924,6 +1399,8 @@ export const useStackStore = create<StackStore>((set) => ({
       return {
         project: snapshot.project,
         selectedLayerId: snapshot.selectedLayerId,
+        devices: snapshot.devices,
+        activeDeviceId: snapshot.activeDeviceId,
         thicknessMode: snapshot.project.thicknessMode,
         isDirty: true,
         historyIndex
@@ -932,7 +1409,12 @@ export const useStackStore = create<StackStore>((set) => ({
 
   pushHistory: (description) =>
     set((state) => {
-      const currentSnapshot = createSnapshot(state.project, state.selectedLayerId)
+      const currentSnapshot = createSnapshot(
+        state.project,
+        state.selectedLayerId,
+        state.devices,
+        state.activeDeviceId
+      )
       const nextHistory = [
         ...state.history.slice(0, state.historyIndex + 1),
         { state: currentSnapshot, description }
@@ -944,6 +1426,28 @@ export const useStackStore = create<StackStore>((set) => ({
       }
     })
 }))
+
+export function selectSerializableProject(state: {
+  project: Project
+  devices: Device[]
+  activeDeviceId: string | null
+}): Project {
+  const project = cloneProject(state.project)
+
+  if (project.structureMode !== 'compare') {
+    return project
+  }
+
+  return {
+    ...project,
+    devices: cloneDevices(state.devices),
+    activeDeviceId: state.activeDeviceId ?? undefined
+  }
+}
+
+export function stripCompareState(project: Project): Project {
+  return cloneProject(project)
+}
 
 export function selectTotalThickness(state: { project: Project }): number {
   return state.project.stacks[0]?.layers.reduce((sum, layer) => sum + layer.thickness, 0) ?? 0

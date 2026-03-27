@@ -309,11 +309,13 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const { preCommon, fmm, postCommon } = splitChannelSection(channelSection)
   const hasFmmSection = fmm.length > 0
   const sortableItems = [
+    ...preCommon.map((layer) => getSortableId(layer.id, 'common')),
     ...CHANNELS.flatMap((channel) =>
       fmm
         .filter((layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel))
         .map((layer) => getSortableId(layer.id, `channel-${channel}`))
     ),
+    ...postCommon.map((layer) => getSortableId(layer.id, 'common')),
     ...lowerSection.flatMap((layer) =>
       isCommonLayer(layer)
         ? []
@@ -373,6 +375,22 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
       return
     }
 
+    const activeLayer = layers.find((layer) => layer.id === activeLayerId)
+    const overLayer = layers.find((layer) => layer.id === overLayerId)
+
+    if (!activeLayer || !overLayer) {
+      return
+    }
+
+    const activeIsSingle = activeLayer.appliesTo.length === 1
+    const overIsSingle = overLayer.appliesTo.length === 1
+    const activeIsCommon = activeLayer.appliesTo.length === 3
+    const overIsCommon = overLayer.appliesTo.length === 3
+
+    if ((activeIsSingle && overIsCommon) || (activeIsCommon && overIsSingle)) {
+      return
+    }
+
     const newIndex = layers.findIndex((layer) => layer.id === overLayerId)
 
     if (newIndex >= 0) {
@@ -419,7 +437,16 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const renderCommonSection = (sectionLayers: Layer[]) =>
     sectionLayers.map((layer) => (
       <div key={layer.id} style={{ display: 'flex', flexDirection: 'column' }}>
-        {renderLowerLayer(layer)}
+        <SortableRGBLayerCell
+          sortableId={getSortableId(layer.id, 'common')}
+          layer={layer}
+          thicknessMode={thicknessMode}
+          scaleFactor={scaleFactor}
+          isSelected={selectedLayerId === layer.id}
+          onSelect={selectLayer}
+          onContextMenu={(event) => handleContextMenu(event, layer.id)}
+          showLabel
+        />
         <InsertZoneWrapper afterId={layer.id} rgbMode={structureMode === 'rgb'} />
       </div>
     ))

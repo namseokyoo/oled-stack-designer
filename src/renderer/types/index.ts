@@ -23,7 +23,7 @@ export type ColorToken =
   | 'custom'
 
 export type PaletteType = 'classic' | 'pastel' | 'vivid'
-export type StructureMode = 'single' | 'rgb'
+export type StructureMode = 'single' | 'rgb' | 'compare'
 export type ViewMode = 'scientific' | 'presentation'
 export type ChannelCode = 'r' | 'g' | 'b'
 export type ThicknessMode = 'uniform' | 'real'
@@ -52,6 +52,12 @@ export interface Stack {
   layers: Layer[]
 }
 
+export interface Device {
+  id: string
+  name: string
+  layers: Layer[]
+}
+
 export interface ProjectMetadata {
   name: string
   version: string
@@ -67,4 +73,6 @@ export interface Project {
   palette: PaletteType
   thicknessMode: ThicknessMode
   stacks: Stack[]
+  devices?: Device[]
+  activeDeviceId?: string
 }

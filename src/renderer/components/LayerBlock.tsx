@@ -131,7 +131,7 @@ export function LayerBlock({
     boxShadow: isDragging
       ? 'var(--shadow-lg)'
       : isSelected
-        ? 'var(--shadow-glow), var(--shadow-sm)'
+        ? '0 0 0 2px var(--accent-blue), 0 0 12px oklch(65% 0.20 265 / 0.35), var(--shadow-sm)'
         : hovered
           ? 'var(--shadow-md)'
           : 'var(--shadow-sm)',
