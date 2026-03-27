@@ -14,3 +14,9 @@ build/
 !build/icon.png
 .env
 .env.local
+# OMX workspace
+.omx/
+# QA test artifacts
+test-results/
+# TypeScript build info
+*.tsbuildinfo
