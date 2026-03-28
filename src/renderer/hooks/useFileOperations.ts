@@ -49,7 +49,6 @@ function getDefaultProjectName(name: string): string {
 }
 
 export function useFileOperations() {
-  const serializedProject = useStackStore(selectSerializableProject)
   const currentFilePath = useStackStore((state) => state.currentFilePath)
   const isDirty = useStackStore((state) => state.isDirty)
   const setCurrentFilePath = useStackStore((state) => state.setCurrentFilePath)
@@ -59,6 +58,7 @@ export function useFileOperations() {
 
   const saveProject = useCallback(async (): Promise<boolean> => {
     try {
+      const serializedProject = selectSerializableProject(useStackStore.getState())
       let filePath = currentFilePath
 
       if (!filePath) {
@@ -85,10 +85,11 @@ export function useFileOperations() {
       alert('프로젝트를 저장하는 중 오류가 발생했습니다.')
       return false
     }
-  }, [currentFilePath, serializedProject, setCurrentFilePath, setDirty])
+  }, [currentFilePath, setCurrentFilePath, setDirty])
 
   const saveProjectAs = useCallback(async (): Promise<boolean> => {
     try {
+      const serializedProject = selectSerializableProject(useStackStore.getState())
       const filePath = await window.oledApi.showSaveDialog(
         getDefaultProjectName(serializedProject.metadata.name)
       )
@@ -111,7 +112,7 @@ export function useFileOperations() {
       alert('프로젝트를 저장하는 중 오류가 발생했습니다.')
       return false
     }
-  }, [serializedProject, setCurrentFilePath, setDirty])
+  }, [setCurrentFilePath, setDirty])
 
   const loadProject = useCallback(
     async (filePath?: string): Promise<boolean> => {
