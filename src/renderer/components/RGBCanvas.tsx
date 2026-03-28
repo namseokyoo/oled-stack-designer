@@ -482,6 +482,18 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                     )
                   }
 
+                  const aboveCommonLayer: Layer | undefined = (() => {
+                    for (let index = blockIndex - 1; index >= 0; index -= 1) {
+                      const previousBlock = channelBlocks[index]
+
+                      if (previousBlock && previousBlock.type === 'common' && previousBlock.layers.length > 0) {
+                        return previousBlock.layers[previousBlock.layers.length - 1]
+                      }
+                    }
+
+                    return undefined
+                  })()
+
                   return (
                     <div
                       key={blockIndex}
@@ -496,6 +508,7 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                         const channelLayers = block.layers.filter(
                           (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
                         )
+                        const isEmpty = channelLayers.length === 0
 
                         return (
                           <div
@@ -508,33 +521,47 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                               gap: 8
                             }}
                           >
-                            <div
-                              style={{
-                                flex: 1,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 8
-                              }}
-                            >
-                              {channelLayers.map((layer) => (
-                                <div
-                                  key={`${layer.id}-${channel}`}
-                                  style={{ display: 'flex', flexDirection: 'column' }}
-                                >
-                                  <SortableRGBLayerCell
-                                    sortableId={getSortableId(layer.id, `channel-${channel}`)}
-                                    layer={layer}
-                                    thicknessMode={thicknessMode}
-                                    scaleFactor={scaleFactor}
-                                    isSelected={selectedLayerId === layer.id}
-                                    onSelect={selectLayer}
-                                    onContextMenu={(event) => handleContextMenu(event, layer.id)}
-                                    showLabel={layer.appliesTo.length === 1 || channel === 'g'}
-                                  />
-                                  <InsertZoneWrapper afterId={layer.id} channelMode={channel} />
-                                </div>
-                              ))}
-                            </div>
+                            {isEmpty && aboveCommonLayer ? (
+                              <div
+                                style={{
+                                  height: 52,
+                                  borderRadius: 'var(--radius-lg)',
+                                  border: '1px dashed var(--border-subtle)',
+                                  background: getLayerColor(aboveCommonLayer),
+                                  opacity: 0.4,
+                                  pointerEvents: 'none',
+                                  cursor: 'default'
+                                }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  flex: 1,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 8
+                                }}
+                              >
+                                {channelLayers.map((layer) => (
+                                  <div
+                                    key={`${layer.id}-${channel}`}
+                                    style={{ display: 'flex', flexDirection: 'column' }}
+                                  >
+                                    <SortableRGBLayerCell
+                                      sortableId={getSortableId(layer.id, `channel-${channel}`)}
+                                      layer={layer}
+                                      thicknessMode={thicknessMode}
+                                      scaleFactor={scaleFactor}
+                                      isSelected={selectedLayerId === layer.id}
+                                      onSelect={selectLayer}
+                                      onContextMenu={(event) => handleContextMenu(event, layer.id)}
+                                      showLabel={layer.appliesTo.length === 1 || channel === 'g'}
+                                    />
+                                    <InsertZoneWrapper afterId={layer.id} channelMode={channel} />
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )
                       })}

@@ -545,6 +545,18 @@ function SlotCard({
                 )
               }
 
+              const aboveCommonLayer: Layer | undefined = (() => {
+                for (let index = blockIndex - 1; index >= 0; index -= 1) {
+                  const previousBlock = channelBlocks[index]
+
+                  if (previousBlock && previousBlock.type === 'common' && previousBlock.layers.length > 0) {
+                    return previousBlock.layers[previousBlock.layers.length - 1]
+                  }
+                }
+
+                return undefined
+              })()
+
               return (
                 <div
                   key={`${slot.id}-fmm-${blockIndex}`}
@@ -554,6 +566,7 @@ function SlotCard({
                     const channelLayers = block.layers.filter(
                       (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
                     )
+                    const isEmpty = channelLayers.length === 0
 
                     return (
                       <div
@@ -566,22 +579,47 @@ function SlotCard({
                           gap: 8
                         }}
                       >
-                        {channelLayers.map((layer) => (
-                          <CompareLayerCell
-                            key={`${layer.id}-${channel}`}
-                            slotId={slot.id}
-                            layer={layer}
-                            accent={accent}
-                            selectedCompareId={selectedCompareId}
-                            onSelectLayer={onSelectLayer}
+                        {isEmpty && aboveCommonLayer ? (
+                          <div
+                            style={{
+                              height: 52,
+                              borderRadius: 'var(--radius-lg)',
+                              border: '1px dashed var(--border-subtle)',
+                              background: getLayerColor(aboveCommonLayer),
+                              opacity: 0.4,
+                              pointerEvents: 'none',
+                              cursor: 'default'
+                            }}
                           />
-                        ))}
+                        ) : (
+                          channelLayers.map((layer) => (
+                            <CompareLayerCell
+                              key={`${layer.id}-${channel}`}
+                              slotId={slot.id}
+                              layer={layer}
+                              accent={accent}
+                              selectedCompareId={selectedCompareId}
+                              onSelectLayer={onSelectLayer}
+                            />
+                          ))
+                        )}
                       </div>
                     )
                   })}
                 </div>
               )
             })}
+
+            {lowerSection.map((layer) => (
+              <CompareLayerCell
+                key={layer.id}
+                slotId={slot.id}
+                layer={layer}
+                accent={accent}
+                selectedCompareId={selectedCompareId}
+                onSelectLayer={onSelectLayer}
+              />
+            ))}
 
             {hasFmmSection ? (
               <div style={{ display: 'flex', marginTop: 4 }}>
@@ -602,17 +640,6 @@ function SlotCard({
                 ))}
               </div>
             ) : null}
-
-            {lowerSection.map((layer) => (
-              <CompareLayerCell
-                key={layer.id}
-                slotId={slot.id}
-                layer={layer}
-                accent={accent}
-                selectedCompareId={selectedCompareId}
-                onSelectLayer={onSelectLayer}
-              />
-            ))}
           </>
         ) : (
           unifiedLayers.map((entry) => {
