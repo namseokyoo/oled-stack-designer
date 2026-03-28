@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useStackStore } from '../stores/useStackStore'
 import type { Layer, Project } from '../types'
 import { getLayerColor } from './LayerBlock'
+import { CHANNELS, CHANNEL_META, isCommonLayer, splitChannelSection } from './rgbUtils'
 import { useCanvasKeyboardShortcuts } from './canvasShared'
 
 const DEVICE_ACCENTS = [
@@ -44,6 +45,16 @@ function getFileName(filePath: string): string {
 
 function getProjectLayers(project: Project): Layer[] {
   return project.stacks[0]?.layers ?? []
+}
+
+function getLastEmlIndex(layers: Layer[]): number {
+  for (let index = layers.length - 1; index >= 0; index -= 1) {
+    if (layers[index]?.role === 'eml') {
+      return index
+    }
+  }
+
+  return -1
 }
 
 function validateProject(data: unknown): data is Project {
@@ -182,6 +193,112 @@ function EmptyLayerBlock() {
   )
 }
 
+interface CompareLayerCellProps {
+  slotId: string
+  layer: Layer
+  accent: string
+  selectedCompareId: string | null
+  onSelectLayer: (compareId: string) => void
+  diffStatus?: DiffStatus
+}
+
+function CompareLayerCell({
+  slotId,
+  layer,
+  accent,
+  selectedCompareId,
+  onSelectLayer,
+  diffStatus
+}: CompareLayerCellProps) {
+  const compareId = getCompareSelectionId(slotId, layer.id)
+  const isSelected = selectedCompareId === compareId
+  const leftBarColor =
+    diffStatus === 'changed' ? CHANGED_ACCENT : diffStatus === 'added' ? ADDED_ACCENT : 'transparent'
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectLayer(compareId)}
+      style={{
+        position: 'relative',
+        height: 52,
+        borderRadius: 'var(--radius-lg)',
+        border: `1px solid ${isSelected ? accent : 'var(--surface-line-faint)'}`,
+        background: getLayerColor(layer),
+        boxShadow: isSelected
+          ? `0 0 0 1px ${accent}, 0 0 12px color-mix(in oklab, ${accent} 35%, transparent)`
+          : 'var(--shadow-sm)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '0 12px 0 14px',
+        overflow: 'hidden',
+        color: 'var(--layer-text-primary)'
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          background: leftBarColor
+        }}
+      />
+      <div
+        style={{
+          width: 8,
+          height: 24,
+          borderRadius: 999,
+          background: 'color-mix(in oklab, black 18%, transparent)',
+          border: '1px solid color-mix(in oklab, white 24%, transparent)',
+          flexShrink: 0
+        }}
+      />
+      <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 700,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            textShadow: '0 1px 2px var(--layer-action-bg)'
+          }}
+        >
+          {layer.name}
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontFamily: 'var(--font-mono)',
+            color: 'var(--layer-text-secondary)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis'
+          }}
+        >
+          {layer.material || 'No material'}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <span
+          style={{
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            fontWeight: 700,
+            textShadow: '0 1px 2px var(--layer-action-bg)'
+          }}
+        >
+          {layer.thickness} nm
+        </span>
+        {diffStatus ? <DiffBadge status={diffStatus} /> : null}
+      </div>
+    </button>
+  )
+}
+
 function CompareLegend() {
   return (
     <div
@@ -302,6 +419,12 @@ function SlotCard({
   onRemove
 }: SlotCardProps) {
   const slotLayers = getProjectLayers(slot.project)
+  const isRgbSlot = slot.project.structureMode === 'rgb'
+  const lastEmlIndex = getLastEmlIndex(slotLayers)
+  const channelSection = isRgbSlot && lastEmlIndex >= 0 ? slotLayers.slice(0, lastEmlIndex + 1) : []
+  const lowerSection = isRgbSlot && lastEmlIndex >= 0 ? slotLayers.slice(lastEmlIndex + 1) : slotLayers
+  const channelBlocks = isRgbSlot ? splitChannelSection(channelSection) : []
+  const hasFmmSection = channelBlocks.some((block) => block.type === 'fmm')
 
   return (
     <div
@@ -399,108 +522,121 @@ function SlotCard({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {unifiedLayers.map((entry) => {
-          const layer = findLayer(slot.project, entry.role, entry.name)
-          const baseLayer = findLayer(baseProject, entry.role, entry.name)
-          const diffStatus = getDiffStatus(layer, baseLayer, isBaseSlot)
-          const leftBarColor =
-            diffStatus === 'changed'
-              ? CHANGED_ACCENT
-              : diffStatus === 'added'
-                ? ADDED_ACCENT
-                : 'transparent'
+        {isRgbSlot ? (
+          <>
+            {channelBlocks.map((block, blockIndex) => {
+              if (block.type === 'common') {
+                return (
+                  <div
+                    key={`${slot.id}-common-${blockIndex}`}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                  >
+                    {block.layers.map((layer) => (
+                      <CompareLayerCell
+                        key={layer.id}
+                        slotId={slot.id}
+                        layer={layer}
+                        accent={accent}
+                        selectedCompareId={selectedCompareId}
+                        onSelectLayer={onSelectLayer}
+                      />
+                    ))}
+                  </div>
+                )
+              }
 
-          if (!layer) {
-            return <EmptyLayerBlock key={`${slot.id}-${entry.role}-${entry.name}`} />
-          }
-
-          const compareId = getCompareSelectionId(slot.id, layer.id)
-          const isSelected = selectedCompareId === compareId
-
-          return (
-            <button
-              key={`${slot.id}-${entry.role}-${entry.name}`}
-              type="button"
-              onClick={() => onSelectLayer(compareId)}
-              style={{
-                position: 'relative',
-                height: 52,
-                borderRadius: 'var(--radius-lg)',
-                border: `1px solid ${isSelected ? accent : 'var(--surface-line-faint)'}`,
-                background: getLayerColor(layer),
-                boxShadow: isSelected
-                  ? `0 0 0 1px ${accent}, 0 0 12px color-mix(in oklab, ${accent} 35%, transparent)`
-                  : 'var(--shadow-sm)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '0 12px 0 14px',
-                overflow: 'hidden',
-                color: 'var(--layer-text-primary)'
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: 3,
-                  background: leftBarColor
-                }}
-              />
-              <div
-                style={{
-                  width: 8,
-                  height: 24,
-                  borderRadius: 999,
-                  background: 'color-mix(in oklab, black 18%, transparent)',
-                  border: '1px solid color-mix(in oklab, white 24%, transparent)',
-                  flexShrink: 0
-                }}
-              />
-              <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    textShadow: '0 1px 2px var(--layer-action-bg)'
-                  }}
+              return (
+                <div
+                  key={`${slot.id}-fmm-${blockIndex}`}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: 4, width: '100%' }}
                 >
-                  {layer.name}
-                </span>
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontFamily: 'var(--font-mono)',
-                    color: 'var(--layer-text-secondary)',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
-                  }}
-                >
-                  {layer.material || 'No material'}
-                </span>
+                  {CHANNELS.map((channel) => {
+                    const channelLayers = block.layers.filter(
+                      (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
+                    )
+
+                    return (
+                      <div
+                        key={channel}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 8
+                        }}
+                      >
+                        {channelLayers.map((layer) => (
+                          <CompareLayerCell
+                            key={`${layer.id}-${channel}`}
+                            slotId={slot.id}
+                            layer={layer}
+                            accent={accent}
+                            selectedCompareId={selectedCompareId}
+                            onSelectLayer={onSelectLayer}
+                          />
+                        ))}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+
+            {hasFmmSection ? (
+              <div style={{ display: 'flex', marginTop: 4 }}>
+                {CHANNELS.map((channel) => (
+                  <span
+                    key={channel}
+                    style={{
+                      flex: 1,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: CHANNEL_META[channel].color,
+                      letterSpacing: '0.08em',
+                      textAlign: 'center'
+                    }}
+                  >
+                    {CHANNEL_META[channel].label}
+                  </span>
+                ))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: 700,
-                    textShadow: '0 1px 2px var(--layer-action-bg)'
-                  }}
-                >
-                  {layer.thickness} nm
-                </span>
-                <DiffBadge status={diffStatus} />
-              </div>
-            </button>
-          )
-        })}
+            ) : null}
+
+            {lowerSection.map((layer) => (
+              <CompareLayerCell
+                key={layer.id}
+                slotId={slot.id}
+                layer={layer}
+                accent={accent}
+                selectedCompareId={selectedCompareId}
+                onSelectLayer={onSelectLayer}
+              />
+            ))}
+          </>
+        ) : (
+          unifiedLayers.map((entry) => {
+            const layer = findLayer(slot.project, entry.role, entry.name)
+            const baseLayer = findLayer(baseProject, entry.role, entry.name)
+            const diffStatus = getDiffStatus(layer, baseLayer, isBaseSlot)
+
+            if (!layer) {
+              return <EmptyLayerBlock key={`${slot.id}-${entry.role}-${entry.name}`} />
+            }
+
+            return (
+              <CompareLayerCell
+                key={`${slot.id}-${entry.role}-${entry.name}`}
+                slotId={slot.id}
+                layer={layer}
+                accent={accent}
+                selectedCompareId={selectedCompareId}
+                onSelectLayer={onSelectLayer}
+                diffStatus={diffStatus}
+              />
+            )
+          })
+        )}
       </div>
     </div>
   )

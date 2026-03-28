@@ -20,12 +20,13 @@ import { CSS } from '@dnd-kit/utilities'
 import { Lock, Plus } from 'lucide-react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useStackStore } from '../stores/useStackStore'
-import type { ChannelCode, Layer } from '../types'
+import type { Layer } from '../types'
 import { ContextMenu, SplitConfirmDialog, type ContextMenuState } from './ContextMenu'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
 import { EmptyState } from './EmptyState'
 import { InsertZoneWrapper } from './InsertZone'
 import { getBlockHeight, getLayerColor, LayerBlock } from './LayerBlock'
+import { CHANNELS, CHANNEL_META, isCommonLayer, splitChannelSection } from './rgbUtils'
 import {
   CANVAS_LAYER_AREA_HEIGHT,
   computeScaleFactor,
@@ -39,18 +40,6 @@ interface DeleteTarget {
 
 interface RGBCanvasProps {
   onOpenExamples: () => void
-}
-
-const CHANNELS: ChannelCode[] = ['r', 'g', 'b']
-
-const CHANNEL_META: Record<ChannelCode, { label: string; color: string }> = {
-  r: { label: 'R', color: 'var(--layer-eml-r)' },
-  g: { label: 'G', color: 'var(--layer-eml-g)' },
-  b: { label: 'B', color: 'var(--layer-eml-b)' }
-}
-
-function isCommonLayer(layer: Layer): boolean {
-  return layer.appliesTo.length === CHANNELS.length
 }
 
 function getLastEmlIndex(layers: Layer[]): number {
@@ -69,51 +58,6 @@ function getSortableId(layerId: string, location: string): string {
 
 function getLayerIdFromSortableId(sortableId: string): string {
   return sortableId.split('::')[0] ?? sortableId
-}
-
-type ChannelSectionBlock =
-  | { type: 'common'; layers: Layer[] }
-  | { type: 'fmm'; layers: Layer[] }
-
-function splitChannelSection(channelSection: Layer[]): ChannelSectionBlock[] {
-  const blocks: ChannelSectionBlock[] = []
-  let index = 0
-
-  while (index < channelSection.length) {
-    const layer = channelSection[index]
-
-    if (!layer) {
-      index += 1
-      continue
-    }
-
-    const isSingle = layer.appliesTo.length === 1
-    const blockType = isSingle ? 'fmm' : 'common'
-    const group: Layer[] = []
-
-    while (index < channelSection.length) {
-      const currentLayer = channelSection[index]
-
-      if (!currentLayer) {
-        index += 1
-        continue
-      }
-
-      const currentIsSingle = currentLayer.appliesTo.length === 1
-      if ((blockType === 'fmm') !== currentIsSingle) {
-        break
-      }
-
-      group.push(currentLayer)
-      index += 1
-    }
-
-    if (group.length > 0) {
-      blocks.push({ type: blockType, layers: group })
-    }
-  }
-
-  return blocks
 }
 
 interface RGBLayerCellProps {
