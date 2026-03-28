@@ -255,6 +255,32 @@ ipcMain.handle('fs:unlink', async (_, filePath: string) => {
   }
 })
 
+ipcMain.handle('recent-file:set', async (_, filePath: string) => {
+  const storePath = join(app.getPath('userData'), 'recent-file.json')
+  await writeFile(storePath, JSON.stringify({ filePath }), 'utf-8')
+})
+
+ipcMain.handle('recent-file:get', async () => {
+  try {
+    const storePath = join(app.getPath('userData'), 'recent-file.json')
+    const data = await readFile(storePath, 'utf-8')
+    const parsed = JSON.parse(data) as { filePath: string }
+    await stat(parsed.filePath)
+    return parsed.filePath
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('recent-file:clear', async () => {
+  try {
+    const storePath = join(app.getPath('userData'), 'recent-file.json')
+    await unlink(storePath)
+  } catch {
+    return
+  }
+})
+
 ipcMain.handle('app:temp-path', () => {
   return join(app.getPath('temp'), 'oled-stack-designer-backup.json')
 })

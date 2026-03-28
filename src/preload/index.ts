@@ -24,6 +24,9 @@ export interface OledApi {
   autosaveList: () => Promise<Array<{ filePath: string; timestamp: number }>>
   autosaveLoad: (filePath: string) => Promise<string | null>
   autosaveDelete: (filePath: string) => Promise<void>
+  setRecentFile: (filePath: string) => Promise<void>
+  getRecentFile: () => Promise<string | null>
+  clearRecentFile: () => Promise<void>
 }
 
 const oledApi: OledApi = {
@@ -56,6 +59,9 @@ const oledApi: OledApi = {
   autosaveList: () => ipcRenderer.invoke('autosave:list'),
   autosaveLoad: (filePath) => ipcRenderer.invoke('autosave:load', filePath),
   autosaveDelete: (filePath) => ipcRenderer.invoke('autosave:delete', filePath),
+  setRecentFile: (filePath) => ipcRenderer.invoke('recent-file:set', filePath),
+  getRecentFile: () => ipcRenderer.invoke('recent-file:get'),
+  clearRecentFile: () => ipcRenderer.invoke('recent-file:clear'),
   onMenuCommand: (callback) => {
     const menuEvents = [
       'menu:new-project',

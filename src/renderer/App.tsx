@@ -15,6 +15,10 @@ import { useFileOperations } from './hooks/useFileOperations'
 import { useStackStore } from './stores/useStackStore'
 import type { PaletteType, Project, StructureMode } from './types'
 
+function getFileName(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() ?? filePath
+}
+
 export function App() {
   const palette = useStackStore((state) => state.project.palette)
   const structureMode = useStackStore((state) => state.project.structureMode)
@@ -27,6 +31,9 @@ export function App() {
   const [showHelp, setShowHelp] = useState(false)
   const [backupMtimeMs, setBackupMtimeMs] = useState(0)
   const [autosaveFilePath, setAutosaveFilePath] = useState<string | null>(null)
+  const [showRecentFile, setShowRecentFile] = useState(false)
+  const [recentFilePath, setRecentFilePath] = useState<string | null>(null)
+  const [recentFileName, setRecentFileName] = useState('')
 
   const { saveProject, saveProjectAs, loadProject, newProject } = useFileOperations()
   useAutoBackup()
@@ -55,7 +62,15 @@ export function App() {
         setBackupMtimeMs(latest.timestamp)
         setAutosaveFilePath(latest.filePath)
         setShowRecovery(true)
+        return
       }
+
+      const nextRecentFilePath = await window.oledApi.getRecentFile()
+      if (!mounted || !nextRecentFilePath) return
+
+      setRecentFilePath(nextRecentFilePath)
+      setRecentFileName(getFileName(nextRecentFilePath))
+      setShowRecentFile(true)
     }
 
     void checkForRecovery().catch(() => undefined)
@@ -64,6 +79,12 @@ export function App() {
       mounted = false
     }
   }, [])
+
+  useEffect(() => {
+    if (showRecovery) {
+      setShowRecentFile(false)
+    }
+  }, [showRecovery])
 
   useEffect(() => {
     const unsubscribe = window.oledApi.onMenuCommand(async (command, payload) => {
@@ -175,6 +196,22 @@ export function App() {
     setShowRecovery(false)
   }
 
+  const handleRecentFileLoad = async () => {
+    if (!recentFilePath) {
+      return
+    }
+
+    try {
+      const content = await window.oledApi.readFile(recentFilePath)
+      const parsed = JSON.parse(content) as Project
+      useStackStore.getState().loadProjectFromData(parsed)
+      useStackStore.getState().setCurrentFilePath(recentFilePath)
+      setShowRecentFile(false)
+    } catch {
+      setShowRecentFile(false)
+    }
+  }
+
   return (
     <div
       data-palette={palette}
@@ -218,6 +255,96 @@ export function App() {
           }}
         />
       ) : null}
+      {showRecentFile && recentFilePath ? (
+        <RecentFileDialog
+          fileName={recentFileName}
+          onConfirm={() => {
+            void handleRecentFileLoad()
+          }}
+          onCancel={() => setShowRecentFile(false)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+function RecentFileDialog({
+  fileName,
+  onConfirm,
+  onCancel
+}: {
+  fileName: string
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'color-mix(in oklab, var(--overlay-backdrop) 78%, transparent)',
+        backdropFilter: 'blur(12px)',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 24,
+        zIndex: 1001
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: 'min(420px, 100%)',
+          padding: 24,
+          borderRadius: 'var(--radius-xl)',
+          background: 'var(--bg-surface)',
+          border: '1px solid var(--surface-line-faint)',
+          boxShadow: 'var(--shadow-lg)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 18
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3 style={{ fontSize: 16, fontWeight: 700 }}>최근 파일 불러오기</h3>
+          <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
+            최근 파일 {fileName}을(를) 불러올까요?
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 13,
+              fontWeight: 600,
+              border: '1px solid var(--surface-line-faint)',
+              background: 'var(--bg-elevated)',
+              color: 'var(--text-secondary)'
+            }}
+          >
+            새 프로젝트로 시작
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 13,
+              fontWeight: 700,
+              border: '1px solid transparent',
+              background: 'var(--accent-blue)',
+              color: 'var(--button-primary-text)'
+            }}
+          >
+            불러오기
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

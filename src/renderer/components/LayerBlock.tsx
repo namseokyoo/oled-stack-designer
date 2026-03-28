@@ -248,7 +248,10 @@ export function LayerBlock({
               fontSize: 11,
               color: 'var(--layer-text-primary)',
               textShadow: '0 1px 2px var(--layer-action-bg)',
-              whiteSpace: 'nowrap'
+              whiteSpace: 'nowrap',
+              maxWidth: 160,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
             }}
           >
             {layer.thickness}nm · {layer.material || 'No material'}

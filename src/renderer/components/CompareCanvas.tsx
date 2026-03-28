@@ -1,25 +1,7 @@
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-  useSortable,
-  arrayMove
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { Plus, X } from 'lucide-react'
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useStackStore } from '../stores/useStackStore'
-import type { Device, Layer } from '../types'
-import { EmptyState } from './EmptyState'
+import type { Layer, Project } from '../types'
 import { getLayerColor } from './LayerBlock'
 import { useCanvasKeyboardShortcuts } from './canvasShared'
 
@@ -38,6 +20,13 @@ interface CompareCanvasProps {
   onOpenExamples: () => void
 }
 
+interface CompareSlot {
+  id: string
+  filePath: string
+  fileName: string
+  project: Project
+}
+
 type LayerKey = {
   role: string
   name: string
@@ -45,12 +34,39 @@ type LayerKey = {
 
 type DiffStatus = 'same' | 'changed' | 'added' | 'missing'
 
-function buildUnifiedLayerList(devices: Device[]): LayerKey[] {
+function createCompareSlotId(): string {
+  return `compare-slot-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function getFileName(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() ?? filePath
+}
+
+function getProjectLayers(project: Project): Layer[] {
+  return project.stacks[0]?.layers ?? []
+}
+
+function validateProject(data: unknown): data is Project {
+  if (typeof data !== 'object' || data === null) {
+    return false
+  }
+
+  const project = data as Record<string, unknown>
+
+  return (
+    typeof project.schemaVersion === 'string' &&
+    typeof project.metadata === 'object' &&
+    project.metadata !== null &&
+    Array.isArray(project.stacks)
+  )
+}
+
+function buildUnifiedLayerList(slots: CompareSlot[]): LayerKey[] {
   const seen = new Set<string>()
   const result: LayerKey[] = []
 
-  for (const device of devices) {
-    for (const layer of device.layers) {
+  for (const slot of slots) {
+    for (const layer of getProjectLayers(slot.project)) {
       const key = `${layer.role}::${layer.name}`
 
       if (!seen.has(key)) {
@@ -63,16 +79,16 @@ function buildUnifiedLayerList(devices: Device[]): LayerKey[] {
   return result
 }
 
-function findLayer(device: Device, role: string, name: string): Layer | undefined {
-  return device.layers.find((layer) => layer.role === role && layer.name === name)
+function findLayer(project: Project, role: string, name: string): Layer | undefined {
+  return getProjectLayers(project).find((layer) => layer.role === role && layer.name === name)
 }
 
 function getDiffStatus(
   layer: Layer | undefined,
   baseLayer: Layer | undefined,
-  isBaseDevice: boolean
+  isBaseSlot: boolean
 ): DiffStatus {
-  if (isBaseDevice) {
+  if (isBaseSlot) {
     return layer ? 'same' : 'missing'
   }
 
@@ -97,6 +113,10 @@ function getDiffStatus(
 
 function getTotalThickness(layers: Layer[]): number {
   return layers.reduce((sum, layer) => sum + layer.thickness, 0)
+}
+
+function getCompareSelectionId(slotId: string, layerId: string): string {
+  return `${slotId}::${layerId}`
 }
 
 function DiffBadge({ status }: { status: DiffStatus }) {
@@ -220,8 +240,8 @@ function AddDeviceCard({ onAdd }: { onAdd: () => void }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        width: 300,
-        minWidth: 300,
+        flex: 1,
+        minWidth: 240,
         minHeight: 220,
         padding: 0,
         borderRadius: 'var(--radius-xl)',
@@ -250,87 +270,44 @@ function AddDeviceCard({ onAdd }: { onAdd: () => void }) {
       >
         <Plus size={18} />
       </div>
-      <div style={{ fontSize: 14, fontWeight: 700 }}>Device 추가</div>
+      <div style={{ fontSize: 14, fontWeight: 700 }}>파일 불러오기</div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>최대 4개까지 비교할 수 있습니다.</div>
     </button>
   )
 }
 
-interface SortableLayerItemProps {
-  id: string
-  children: (dragHandleProps: React.HTMLAttributes<HTMLElement>) => React.ReactNode
-}
-
-function SortableLayerItem({ id, children }: SortableLayerItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    position: 'relative'
-  }
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      {children({ ...attributes, ...listeners })}
-    </div>
-  )
-}
-
-interface DeviceCardProps {
-  device: Device
+interface SlotCardProps {
+  slot: CompareSlot
   accent: string
   label: string
-  isActive: boolean
   unifiedLayers: LayerKey[]
-  baseDevice: Device
-  isBaseDevice: boolean
-  selectedLayerId: string | null
-  onSelectDevice: () => void
-  onSelectLayer: (layerId: string) => void
-  canRemove: boolean
+  baseProject: Project
+  isBaseSlot: boolean
+  selectedCompareId: string | null
+  onSelectLayer: (compareId: string) => void
+  onReplace: () => void
   onRemove: () => void
-  onUpdateLayers: (deviceId: string, layers: Layer[]) => void
 }
 
-function DeviceCard({
-  device,
+function SlotCard({
+  slot,
   accent,
   label,
-  isActive,
   unifiedLayers,
-  baseDevice,
-  isBaseDevice,
-  selectedLayerId,
-  onSelectDevice,
+  baseProject,
+  isBaseSlot,
+  selectedCompareId,
   onSelectLayer,
-  canRemove,
-  onRemove,
-  onUpdateLayers
-}: DeviceCardProps) {
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  )
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const oldIndex = device.layers.findIndex((l) => l.id === active.id)
-    const newIndex = device.layers.findIndex((l) => l.id === over.id)
-    if (oldIndex !== -1 && newIndex !== -1) {
-      onUpdateLayers(device.id, arrayMove(device.layers, oldIndex, newIndex))
-    }
-  }
-
-  const layerIds = device.layers.map((l) => l.id)
+  onReplace,
+  onRemove
+}: SlotCardProps) {
+  const slotLayers = getProjectLayers(slot.project)
 
   return (
     <div
       style={{
-        width: 300,
-        minWidth: 300,
+        flex: 1,
+        minWidth: 240,
         display: 'flex',
         flexDirection: 'column',
         gap: 14
@@ -340,27 +317,13 @@ function DeviceCard({
         style={{
           padding: 16,
           borderRadius: 'var(--radius-xl)',
-          border: `1px solid ${isActive ? accent : 'var(--surface-line-faint)'}`,
+          border: `1px solid ${accent}`,
           background: 'var(--bg-surface)',
-          boxShadow: isActive ? '0 0 0 1px color-mix(in oklab, transparent 70%, white)' : 'none'
+          boxShadow: '0 0 0 1px color-mix(in oklab, transparent 70%, white)'
         }}
       >
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-          <button
-            type="button"
-            onClick={onSelectDevice}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              minWidth: 0,
-              flex: 1,
-              color: 'inherit',
-              background: 'transparent',
-              border: 'none',
-              padding: 0
-            }}
-          >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
             <span
               style={{
                 width: 30,
@@ -377,15 +340,43 @@ function DeviceCard({
             >
               {label}
             </span>
-            <div style={{ minWidth: 0, textAlign: 'left' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{device.name}</div>
+            <div style={{ minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: 'var(--text-primary)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis'
+                }}
+                title={slot.fileName}
+              >
+                {slot.fileName}
+              </div>
               <div style={{ marginTop: 4, fontSize: 11, color: 'var(--text-muted)' }}>
-                {device.layers.length}층 · {getTotalThickness(device.layers)} nm
+                {slotLayers.length}층 · {getTotalThickness(slotLayers)} nm
+                {isBaseSlot ? ' · Base' : ''}
               </div>
             </div>
-          </button>
+          </div>
 
-          {canRemove ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={onReplace}
+              style={{
+                padding: '6px 10px',
+                borderRadius: 'var(--radius-pill)',
+                border: '1px solid var(--surface-line-faint)',
+                background: 'transparent',
+                fontSize: 11,
+                fontWeight: 700,
+                color: 'var(--text-secondary)'
+              }}
+            >
+              교체
+            </button>
             <button
               type="button"
               onClick={onRemove}
@@ -397,49 +388,40 @@ function DeviceCard({
                 background: 'transparent',
                 display: 'grid',
                 placeItems: 'center',
-                color: 'var(--text-muted)',
-                flexShrink: 0
+                color: 'var(--text-muted)'
               }}
-              title={`${device.name} 제거`}
+              title={`${slot.fileName} 제거`}
             >
               <X size={14} />
             </button>
-          ) : null}
+          </div>
         </div>
       </div>
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={isActive ? handleDragEnd : undefined}
-      >
-        <SortableContext items={layerIds} strategy={verticalListSortingStrategy}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {unifiedLayers.map((entry) => {
-              const layer = findLayer(device, entry.role, entry.name)
-              const baseLayer = findLayer(baseDevice, entry.role, entry.name)
-              const diffStatus = getDiffStatus(layer, baseLayer, isBaseDevice)
-              const leftBarColor =
-                diffStatus === 'changed'
-                  ? CHANGED_ACCENT
-                  : diffStatus === 'added'
-                    ? ADDED_ACCENT
-                    : 'transparent'
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {unifiedLayers.map((entry) => {
+          const layer = findLayer(slot.project, entry.role, entry.name)
+          const baseLayer = findLayer(baseProject, entry.role, entry.name)
+          const diffStatus = getDiffStatus(layer, baseLayer, isBaseSlot)
+          const leftBarColor =
+            diffStatus === 'changed'
+              ? CHANGED_ACCENT
+              : diffStatus === 'added'
+                ? ADDED_ACCENT
+                : 'transparent'
 
-              if (!layer) {
-                return <EmptyLayerBlock key={`${device.id}-${entry.role}-${entry.name}`} />
-              }
+          if (!layer) {
+            return <EmptyLayerBlock key={`${slot.id}-${entry.role}-${entry.name}`} />
+          }
 
-              const isSelected = isActive && selectedLayerId === layer.id
-              const layerButton = (dragProps: React.HTMLAttributes<HTMLElement> = {}) => (
-                <button
-                  key={`${device.id}-${entry.role}-${entry.name}`}
-                  type="button"
-                  onClick={() => {
-                    onSelectDevice()
-                    onSelectLayer(layer.id)
-                  }}
-                  {...(isActive ? dragProps : {})}
+          const compareId = getCompareSelectionId(slot.id, layer.id)
+          const isSelected = selectedCompareId === compareId
+
+          return (
+            <button
+              key={`${slot.id}-${entry.role}-${entry.name}`}
+              type="button"
+              onClick={() => onSelectLayer(compareId)}
               style={{
                 position: 'relative',
                 height: 52,
@@ -456,116 +438,208 @@ function DeviceCard({
                 overflow: 'hidden',
                 color: 'var(--layer-text-primary)'
               }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: 3,
+                  background: leftBarColor
+                }}
+              />
+              <div
+                style={{
+                  width: 8,
+                  height: 24,
+                  borderRadius: 999,
+                  background: 'color-mix(in oklab, black 18%, transparent)',
+                  border: '1px solid color-mix(in oklab, white 24%, transparent)',
+                  flexShrink: 0
+                }}
+              />
+              <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    textShadow: '0 1px 2px var(--layer-action-bg)'
+                  }}
                 >
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      top: 0,
-                      bottom: 0,
-                      width: 3,
-                      background: leftBarColor
-                    }}
-                  />
-                  <div
-                    style={{
-                      width: 8,
-                      height: 24,
-                      borderRadius: 999,
-                      background: 'color-mix(in oklab, black 18%, transparent)',
-                      border: '1px solid color-mix(in oklab, white 24%, transparent)',
-                      flexShrink: 0
-                    }}
-                  />
-                  <div style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 700,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        textShadow: '0 1px 2px var(--layer-action-bg)'
-                      }}
-                    >
-                      {layer.name}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontFamily: 'var(--font-mono)',
-                        color: 'var(--layer-text-secondary)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis'
-                      }}
-                    >
-                      {layer.material || 'No material'}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontFamily: 'var(--font-mono)',
-                        fontWeight: 700,
-                        textShadow: '0 1px 2px var(--layer-action-bg)'
-                      }}
-                    >
-                      {layer.thickness} nm
-                    </span>
-                    <DiffBadge status={diffStatus} />
-                  </div>
-                </button>
-              )
-
-              if (isActive) {
-                return (
-                  <SortableLayerItem key={`${device.id}-${entry.role}-${entry.name}`} id={layer.id}>
-                    {(dragProps) => layerButton(dragProps)}
-                  </SortableLayerItem>
-                )
-              }
-
-              return layerButton()
-            })}
-          </div>
-        </SortableContext>
-      </DndContext>
+                  {layer.name}
+                </span>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontFamily: 'var(--font-mono)',
+                    color: 'var(--layer-text-secondary)',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}
+                >
+                  {layer.material || 'No material'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 700,
+                    textShadow: '0 1px 2px var(--layer-action-bg)'
+                  }}
+                >
+                  {layer.thickness} nm
+                </span>
+                <DiffBadge status={diffStatus} />
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
 
-export function CompareCanvas({ onOpenExamples }: CompareCanvasProps) {
-  const devices = useStackStore((state) => state.devices)
-  const activeDeviceId = useStackStore((state) => state.activeDeviceId)
-  const selectedLayerId = useStackStore((state) => state.selectedLayerId)
-  const addDevice = useStackStore((state) => state.addDevice)
-  const removeDevice = useStackStore((state) => state.removeDevice)
-  const setActiveDevice = useStackStore((state) => state.setActiveDevice)
+export function CompareCanvas({ onOpenExamples: _onOpenExamples }: CompareCanvasProps) {
+  const selectedCompareId = useStackStore((state) => state.selectedLayerId)
   const selectLayer = useStackStore((state) => state.selectLayer)
-  const removeLayer = useStackStore((state) => state.removeLayer)
-  const updateDeviceLayers = useStackStore((state) => state.updateDeviceLayers)
+  const [slots, setSlots] = useState<CompareSlot[]>([])
 
-  const activeDevice = devices.find((device) => device.id === activeDeviceId) ?? devices[0] ?? null
+  const loadProjectFile = async (): Promise<CompareSlot | null> => {
+    try {
+      const filePath = await window.oledApi.showOpenDialog()
+
+      if (!filePath) {
+        return null
+      }
+
+      const content = await window.oledApi.readFile(filePath)
+      const parsed: unknown = JSON.parse(content)
+
+      if (!validateProject(parsed)) {
+        throw new Error('Invalid project')
+      }
+
+      return {
+        id: createCompareSlotId(),
+        filePath,
+        fileName: getFileName(filePath),
+        project: parsed
+      }
+    } catch {
+      alert('파일을 불러올 수 없습니다.')
+      return null
+    }
+  }
+
+  const handleAddSlot = async () => {
+    if (slots.length >= 4) {
+      return
+    }
+
+    const nextSlot = await loadProjectFile()
+
+    if (!nextSlot) {
+      return
+    }
+
+    setSlots((current) => (current.length >= 4 ? current : [...current, nextSlot]))
+  }
+
+  const handleReplaceSlot = async (slotId: string) => {
+    const replacement = await loadProjectFile()
+
+    if (!replacement) {
+      return
+    }
+
+    setSlots((current) =>
+      current.map((slot) =>
+        slot.id === slotId
+          ? {
+              ...replacement,
+              id: slot.id
+            }
+          : slot
+      )
+    )
+
+    if (selectedCompareId?.startsWith(`${slotId}::`)) {
+      selectLayer(null)
+    }
+  }
+
+  const handleRemoveSlot = (slotId: string) => {
+    const nextSlots = slots.filter((slot) => slot.id !== slotId)
+    setSlots(nextSlots)
+
+    if (selectedCompareId?.startsWith(`${slotId}::`)) {
+      selectLayer(null)
+    }
+  }
+
+  const baseLayers = slots[0] ? getProjectLayers(slots[0].project) : []
 
   useCanvasKeyboardShortcuts({
-    layers: activeDevice?.layers ?? [],
-    onDeleteRequest: removeLayer
+    layers: baseLayers,
+    onDeleteRequest: () => selectLayer(null)
   })
 
-  if (devices.length === 0) {
+  if (slots.length === 0) {
     return (
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <EmptyState onOpenExamples={onOpenExamples} />
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 18,
+          padding: 28,
+          background: 'var(--bg-base)'
+        }}
+      >
+        <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-primary)' }}>
+          비교할 프로젝트 파일을 불러오세요
+        </div>
+        <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
+          최대 4개의 `.json` 또는 `.oledstack` 파일을 동시에 비교할 수 있습니다.
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            void handleAddSlot()
+          }}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '12px 18px',
+            borderRadius: 'var(--radius-pill)',
+            border: '1px solid transparent',
+            background: 'var(--accent-blue)',
+            color: 'var(--button-primary-text)',
+            fontSize: 13,
+            fontWeight: 700
+          }}
+        >
+          <Plus size={16} />
+          파일 불러오기
+        </button>
       </div>
     )
   }
 
-  const unifiedLayers = buildUnifiedLayerList(devices)
-  const baseDevice = devices[0]
+  const unifiedLayers = buildUnifiedLayerList(slots)
+  const baseSlot = slots[0]
 
-  if (!baseDevice) {
+  if (!baseSlot) {
     return null
   }
 
@@ -593,12 +667,12 @@ export function CompareCanvas({ onOpenExamples }: CompareCanvasProps) {
           minWidth: 0
         }}
       >
-        {devices.map((device, index) => {
+        {slots.map((slot, index) => {
           const accent = DEVICE_ACCENTS[index] ?? DEVICE_ACCENTS[0]
           const label = DEVICE_LABELS[index] ?? String(index + 1)
 
           return (
-            <div key={device.id} style={{ display: 'flex', gap: 0 }}>
+            <div key={slot.id} style={{ display: 'flex', gap: 0, flex: 1, minWidth: 0 }}>
               {index > 0 ? (
                 <div
                   style={{
@@ -611,27 +685,26 @@ export function CompareCanvas({ onOpenExamples }: CompareCanvasProps) {
                 />
               ) : null}
 
-              <DeviceCard
-                device={device}
+              <SlotCard
+                slot={slot}
                 accent={accent}
                 label={label}
-                isActive={device.id === (activeDeviceId ?? baseDevice.id)}
                 unifiedLayers={unifiedLayers}
-                baseDevice={baseDevice}
-                isBaseDevice={index === 0}
-                selectedLayerId={selectedLayerId}
-                onSelectDevice={() => setActiveDevice(device.id)}
+                baseProject={baseSlot.project}
+                isBaseSlot={index === 0}
+                selectedCompareId={selectedCompareId}
                 onSelectLayer={selectLayer}
-                canRemove={devices.length > 2}
-                onRemove={() => removeDevice(device.id)}
-                onUpdateLayers={updateDeviceLayers}
+                onReplace={() => {
+                  void handleReplaceSlot(slot.id)
+                }}
+                onRemove={() => handleRemoveSlot(slot.id)}
               />
             </div>
           )
         })}
 
-        {devices.length < 4 ? (
-          <div style={{ display: 'flex', gap: 0 }}>
+        {slots.length < 4 ? (
+          <div style={{ display: 'flex', gap: 0, flex: 1, minWidth: 0 }}>
             <div
               style={{
                 width: 1,
@@ -641,7 +714,11 @@ export function CompareCanvas({ onOpenExamples }: CompareCanvasProps) {
                 opacity: 0.5
               }}
             />
-            <AddDeviceCard onAdd={addDevice} />
+            <AddDeviceCard
+              onAdd={() => {
+                void handleAddSlot()
+              }}
+            />
           </div>
         ) : null}
       </div>

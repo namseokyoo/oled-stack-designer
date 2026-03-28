@@ -71,31 +71,49 @@ function getLayerIdFromSortableId(sortableId: string): string {
   return sortableId.split('::')[0] ?? sortableId
 }
 
-function splitChannelSection(channelSection: Layer[]): {
-  preCommon: Layer[]
-  fmm: Layer[]
-  postCommon: Layer[]
-} {
-  const firstSingleIdx = channelSection.findIndex((layer) => layer.appliesTo.length === 1)
+type ChannelSectionBlock =
+  | { type: 'common'; layers: Layer[] }
+  | { type: 'fmm'; layers: Layer[] }
 
-  if (firstSingleIdx === -1) {
-    return { preCommon: channelSection, fmm: [], postCommon: [] }
-  }
+function splitChannelSection(channelSection: Layer[]): ChannelSectionBlock[] {
+  const blocks: ChannelSectionBlock[] = []
+  let index = 0
 
-  let lastSingleIdx = firstSingleIdx
+  while (index < channelSection.length) {
+    const layer = channelSection[index]
 
-  for (let index = channelSection.length - 1; index >= 0; index -= 1) {
-    if (channelSection[index]?.appliesTo.length === 1) {
-      lastSingleIdx = index
-      break
+    if (!layer) {
+      index += 1
+      continue
+    }
+
+    const isSingle = layer.appliesTo.length === 1
+    const blockType = isSingle ? 'fmm' : 'common'
+    const group: Layer[] = []
+
+    while (index < channelSection.length) {
+      const currentLayer = channelSection[index]
+
+      if (!currentLayer) {
+        index += 1
+        continue
+      }
+
+      const currentIsSingle = currentLayer.appliesTo.length === 1
+      if ((blockType === 'fmm') !== currentIsSingle) {
+        break
+      }
+
+      group.push(currentLayer)
+      index += 1
+    }
+
+    if (group.length > 0) {
+      blocks.push({ type: blockType, layers: group })
     }
   }
 
-  return {
-    preCommon: channelSection.slice(0, firstSingleIdx),
-    fmm: channelSection.slice(firstSingleIdx, lastSingleIdx + 1),
-    postCommon: channelSection.slice(lastSingleIdx + 1)
-  }
+  return blocks
 }
 
 interface RGBLayerCellProps {
@@ -306,23 +324,29 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const lastEmlIndex = getLastEmlIndex(layers)
   const channelSection = lastEmlIndex >= 0 ? layers.slice(0, lastEmlIndex + 1) : []
   const lowerSection = lastEmlIndex >= 0 ? layers.slice(lastEmlIndex + 1) : layers
-  const { preCommon, fmm, postCommon } = splitChannelSection(channelSection)
-  const hasFmmSection = fmm.length > 0
+  const channelBlocks = splitChannelSection(channelSection)
+  const hasFmmSection = channelBlocks.some((block) => block.type === 'fmm')
+  const lastFmmBlock = [...channelBlocks].reverse().find((block) => block.type === 'fmm')
+  const lastFmmLayerId = lastFmmBlock?.layers[lastFmmBlock.layers.length - 1]?.id
   const sortableItems = [
-    ...preCommon.map((layer) => getSortableId(layer.id, 'common')),
-    ...CHANNELS.flatMap((channel) =>
-      fmm
-        .filter((layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel))
-        .map((layer) => getSortableId(layer.id, `channel-${channel}`))
-    ),
-    ...postCommon.map((layer) => getSortableId(layer.id, 'common')),
+    ...channelBlocks.flatMap((block) => {
+      if (block.type === 'common') {
+        return block.layers.map((layer) => getSortableId(layer.id, 'common'))
+      }
+
+      return CHANNELS.flatMap((channel) =>
+        block.layers
+          .filter((layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel))
+          .map((layer) => getSortableId(layer.id, `channel-${channel}`))
+      )
+    }),
     ...lowerSection.flatMap((layer) =>
       isCommonLayer(layer)
-        ? []
+        ? [getSortableId(layer.id, 'common')]
         : CHANNELS.filter((channel) => layer.appliesTo.includes(channel)).map((channel) =>
             getSortableId(layer.id, `lower-${channel}`)
           )
-    )
+    ),
   ]
   const activeLayer = layers.find((layer) => layer.id === activeId) ?? null
 
@@ -496,90 +520,97 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                 maxWidth: 540,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 'var(--sp-2)',
+                gap: 8,
                 paddingBottom: 48
               }}
             >
               <SortableContext items={sortableItems} strategy={verticalListSortingStrategy}>
-                {renderCommonSection(preCommon)}
+                {channelBlocks.map((block, blockIndex) => {
+                  if (block.type === 'common') {
+                    return (
+                      <div key={blockIndex} style={{ display: 'contents' }}>
+                        {renderCommonSection(block.layers)}
+                      </div>
+                    )
+                  }
 
-                {hasFmmSection ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: 4,
-                      width: '100%'
-                    }}
-                  >
-                    {CHANNELS.map((channel) => {
-                      const channelLayers = fmm.filter(
-                        (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
-                      )
+                  return (
+                    <div
+                      key={blockIndex}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 4,
+                        width: '100%'
+                      }}
+                    >
+                      {CHANNELS.map((channel) => {
+                        const channelLayers = block.layers.filter(
+                          (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
+                        )
 
-                      return (
-                        <div
-                          key={channel}
-                          style={{
-                            flex: 1,
-                            minWidth: 0,
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--sp-2)'
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: 12,
-                              fontWeight: 700,
-                              color: CHANNEL_META[channel].color,
-                              letterSpacing: '0.08em',
-                              textAlign: 'center'
-                            }}
-                          >
-                            {CHANNEL_META[channel].label}
-                          </span>
-
+                        return (
                           <div
+                            key={channel}
                             style={{
+                              flex: 1,
+                              minWidth: 0,
                               display: 'flex',
                               flexDirection: 'column',
-                              gap: 'var(--sp-2)'
+                              gap: 8
                             }}
                           >
-                            {channelLayers.map((layer) => (
-                              <div
-                                key={`${layer.id}-${channel}`}
-                                style={{ display: 'flex', flexDirection: 'column' }}
-                              >
-                                <SortableRGBLayerCell
-                                  sortableId={getSortableId(layer.id, `channel-${channel}`)}
-                                  layer={layer}
-                                  thicknessMode={thicknessMode}
-                                  scaleFactor={scaleFactor}
-                                  isSelected={selectedLayerId === layer.id}
-                                  onSelect={selectLayer}
-                                  onContextMenu={(event) => handleContextMenu(event, layer.id)}
-                                  showLabel={layer.appliesTo.length === 1 || channel === 'g'}
-                                />
-                                <InsertZoneWrapper afterId={layer.id} channelMode={channel} />
-                              </div>
-                            ))}
+                            <div
+                              style={{
+                                flex: 1,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 8
+                              }}
+                            >
+                              {channelLayers.map((layer) => (
+                                <div
+                                  key={`${layer.id}-${channel}`}
+                                  style={{ display: 'flex', flexDirection: 'column' }}
+                                >
+                                  <SortableRGBLayerCell
+                                    sortableId={getSortableId(layer.id, `channel-${channel}`)}
+                                    layer={layer}
+                                    thicknessMode={thicknessMode}
+                                    scaleFactor={scaleFactor}
+                                    isSelected={selectedLayerId === layer.id}
+                                    onSelect={selectLayer}
+                                    onContextMenu={(event) => handleContextMenu(event, layer.id)}
+                                    showLabel={layer.appliesTo.length === 1 || channel === 'g'}
+                                  />
+                                  <InsertZoneWrapper afterId={layer.id} channelMode={channel} />
+                                </div>
+                              ))}
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: CHANNEL_META[channel].color,
+                                letterSpacing: '0.08em',
+                                textAlign: 'center'
+                              }}
+                            >
+                              {CHANNEL_META[channel].label}
+                            </span>
                           </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : null}
+                        )
+                      })}
+                    </div>
+                  )
+                })}
 
-                {hasFmmSection && (postCommon.length > 0 || lowerSection.length > 0) ? (
+                {hasFmmSection && lowerSection.length > 0 ? (
                   <InsertZoneWrapper
-                    afterId={fmm[fmm.length - 1]?.id}
+                    afterId={lastFmmLayerId}
                     rgbMode={structureMode === 'rgb'}
                   />
                 ) : null}
-
-                {renderCommonSection(postCommon)}
 
                 {lowerSection.map((layer) => (
                   <div key={layer.id} style={{ display: 'flex', flexDirection: 'column' }}>

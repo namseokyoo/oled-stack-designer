@@ -78,6 +78,7 @@ export function useFileOperations() {
         project: stripCompareState(savedProject),
         thicknessMode: savedProject.thicknessMode
       }))
+      await window.oledApi.setRecentFile(filePath)
       await window.oledApi.setWindowTitle(`${getFileName(filePath)} - OLED Stack Designer`)
       return true
     } catch (error) {
@@ -105,6 +106,7 @@ export function useFileOperations() {
         project: stripCompareState(savedProject),
         thicknessMode: savedProject.thicknessMode
       }))
+      await window.oledApi.setRecentFile(filePath)
       await window.oledApi.setWindowTitle(`${getFileName(filePath)} - OLED Stack Designer`)
       return true
     } catch (error) {
@@ -146,6 +148,7 @@ export function useFileOperations() {
 
         loadProjectFromData(data)
         setCurrentFilePath(targetPath)
+        await window.oledApi.setRecentFile(targetPath)
         await window.oledApi.setWindowTitle(`${getFileName(targetPath)} - OLED Stack Designer`)
         return true
       } catch (error) {
