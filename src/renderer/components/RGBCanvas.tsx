@@ -599,10 +599,12 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                 })}
 
                 {hasFmmSection && lowerSection.length > 0 ? (
-                  <InsertZoneWrapper
-                    afterId={lastFmmLayerId}
-                    rgbMode={structureMode === 'rgb'}
-                  />
+                  <div style={{ marginTop: -8 }}>
+                    <InsertZoneWrapper
+                      afterId={lastFmmLayerId}
+                      rgbMode={structureMode === 'rgb'}
+                    />
+                  </div>
                 ) : null}
 
                 {lowerSection.map((layer) => (
