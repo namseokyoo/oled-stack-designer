@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { useStackStore } from '../stores/useStackStore'
 import type { Layer, Project } from '../types'
 import { getLayerColor } from './LayerBlock'
-import { CHANNELS, CHANNEL_META, isCommonLayer, splitChannelSection } from './rgbUtils'
+import { CHANNELS, CHANNEL_META, isCommonLayer } from './rgbUtils'
 import { useCanvasKeyboardShortcuts } from './canvasShared'
 
 const DEVICE_ACCENTS = [
@@ -423,8 +423,7 @@ function SlotCard({
   const lastEmlIndex = getLastEmlIndex(slotLayers)
   const channelSection = isRgbSlot && lastEmlIndex >= 0 ? slotLayers.slice(0, lastEmlIndex + 1) : []
   const lowerSection = isRgbSlot && lastEmlIndex >= 0 ? slotLayers.slice(lastEmlIndex + 1) : slotLayers
-  const channelBlocks = isRgbSlot ? splitChannelSection(channelSection) : []
-  const hasFmmSection = channelBlocks.some((block) => block.type === 'fmm')
+  const hasFmmSection = channelSection.some((layer) => !isCommonLayer(layer))
 
   return (
     <div
@@ -524,92 +523,46 @@ function SlotCard({
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {isRgbSlot ? (
           <>
-            {channelBlocks.map((block, blockIndex) => {
-              if (block.type === 'common') {
-                return (
-                  <div
-                    key={`${slot.id}-common-${blockIndex}`}
-                    style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-                  >
-                    {block.layers.map((layer) => (
-                      <CompareLayerCell
-                        key={layer.id}
-                        slotId={slot.id}
-                        layer={layer}
-                        accent={accent}
-                        selectedCompareId={selectedCompareId}
-                        onSelectLayer={onSelectLayer}
-                      />
-                    ))}
-                  </div>
-                )
-              }
+            {channelSection.length > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-end',
+                  gap: 4,
+                  width: '100%'
+                }}
+              >
+                {CHANNELS.map((channel) => {
+                  const columnLayers = channelSection.filter(
+                    (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
+                  )
 
-              const aboveCommonLayer: Layer | undefined = (() => {
-                for (let index = blockIndex - 1; index >= 0; index -= 1) {
-                  const previousBlock = channelBlocks[index]
-
-                  if (previousBlock && previousBlock.type === 'common' && previousBlock.layers.length > 0) {
-                    return previousBlock.layers[previousBlock.layers.length - 1]
-                  }
-                }
-
-                return undefined
-              })()
-
-              return (
-                <div
-                  key={`${slot.id}-fmm-${blockIndex}`}
-                  style={{ display: 'flex', alignItems: 'stretch', gap: 4, width: '100%' }}
-                >
-                  {CHANNELS.map((channel) => {
-                    const channelLayers = block.layers.filter(
-                      (layer) => isCommonLayer(layer) || layer.appliesTo.includes(channel)
-                    )
-                    const isEmpty = channelLayers.length === 0
-
-                    return (
-                      <div
-                        key={channel}
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8
-                        }}
-                      >
-                        {isEmpty && aboveCommonLayer ? (
-                          <div
-                            style={{
-                              flex: 1,
-                              minHeight: 40,
-                              borderRadius: 'var(--radius-lg)',
-                              border: '1px dashed var(--border-subtle)',
-                              background: getLayerColor(aboveCommonLayer),
-                              opacity: 0.35,
-                              pointerEvents: 'none',
-                              cursor: 'default'
-                            }}
-                          />
-                        ) : (
-                          channelLayers.map((layer) => (
-                            <CompareLayerCell
-                              key={`${layer.id}-${channel}`}
-                              slotId={slot.id}
-                              layer={layer}
-                              accent={accent}
-                              selectedCompareId={selectedCompareId}
-                              onSelectLayer={onSelectLayer}
-                            />
-                          ))
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
+                  return (
+                    <div
+                      key={channel}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 4
+                      }}
+                    >
+                      {columnLayers.map((layer) => (
+                        <CompareLayerCell
+                          key={`${layer.id}-${channel}`}
+                          slotId={slot.id}
+                          layer={layer}
+                          accent={accent}
+                          selectedCompareId={selectedCompareId}
+                          onSelectLayer={onSelectLayer}
+                        />
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : null}
 
             {lowerSection.map((layer) => (
               <CompareLayerCell
