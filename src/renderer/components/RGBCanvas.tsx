@@ -315,7 +315,11 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
   const [canvasKey, setCanvasKey] = useState(0)
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
