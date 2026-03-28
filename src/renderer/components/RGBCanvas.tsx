@@ -597,7 +597,9 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                                 fontWeight: 700,
                                 color: CHANNEL_META[channel].color,
                                 letterSpacing: '0.08em',
-                                textAlign: 'center'
+                                textAlign: 'center',
+                                marginTop: -6,
+                                marginBottom: 6
                               }}
                             >
                               {CHANNEL_META[channel].label}
