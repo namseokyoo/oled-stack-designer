@@ -591,19 +591,6 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                                 </div>
                               ))}
                             </div>
-                            <span
-                              style={{
-                                fontSize: 12,
-                                fontWeight: 700,
-                                color: CHANNEL_META[channel].color,
-                                letterSpacing: '0.08em',
-                                textAlign: 'center',
-                                marginTop: -6,
-                                marginBottom: 6
-                              }}
-                            >
-                              {CHANNEL_META[channel].label}
-                            </span>
                           </div>
                         )
                       })}
@@ -625,6 +612,32 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                   </div>
                 ))}
               </SortableContext>
+
+              {hasFmmSection && (
+                <div
+                  style={{
+                    display: 'flex',
+                    marginTop: 4,
+                    marginBottom: 2
+                  }}
+                >
+                  {(['r', 'g', 'b'] as const).map((channel) => (
+                    <span
+                      key={channel}
+                      style={{
+                        flex: 1,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: CHANNEL_META[channel].color,
+                        letterSpacing: '0.08em',
+                        textAlign: 'center'
+                      }}
+                    >
+                      {CHANNEL_META[channel].label}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               <button
                 type="button"
