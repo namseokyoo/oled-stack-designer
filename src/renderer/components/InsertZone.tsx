@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useStackStore } from '../stores/useStackStore'
 import type { ChannelCode } from '../types'
-import { INSERT_ZONE_HEIGHT } from './canvasShared'
 
 interface InsertZoneProps {
   afterId?: string
@@ -63,7 +62,7 @@ export function InsertZoneWrapper({ afterId, rgbMode = false, channelMode }: Ins
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        height: hovered ? 16 : INSERT_ZONE_HEIGHT,
+        height: hovered ? 16 : 0, overflow: 'visible',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
