@@ -499,7 +499,7 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                       key={blockIndex}
                       style={{
                         display: 'flex',
-                        alignItems: 'flex-start',
+                        alignItems: 'stretch',
                         gap: 4,
                         width: '100%'
                       }}
@@ -524,11 +524,12 @@ export function RGBCanvas({ onOpenExamples }: RGBCanvasProps) {
                             {isEmpty && aboveCommonLayer ? (
                               <div
                                 style={{
-                                  height: 52,
+                                  flex: 1,
+                                  minHeight: 40,
                                   borderRadius: 'var(--radius-lg)',
                                   border: '1px dashed var(--border-subtle)',
                                   background: getLayerColor(aboveCommonLayer),
-                                  opacity: 0.4,
+                                  opacity: 0.35,
                                   pointerEvents: 'none',
                                   cursor: 'default'
                                 }}

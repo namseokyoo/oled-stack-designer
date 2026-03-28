@@ -560,7 +560,7 @@ function SlotCard({
               return (
                 <div
                   key={`${slot.id}-fmm-${blockIndex}`}
-                  style={{ display: 'flex', alignItems: 'flex-start', gap: 4, width: '100%' }}
+                  style={{ display: 'flex', alignItems: 'stretch', gap: 4, width: '100%' }}
                 >
                   {CHANNELS.map((channel) => {
                     const channelLayers = block.layers.filter(
@@ -582,11 +582,12 @@ function SlotCard({
                         {isEmpty && aboveCommonLayer ? (
                           <div
                             style={{
-                              height: 52,
+                              flex: 1,
+                              minHeight: 40,
                               borderRadius: 'var(--radius-lg)',
                               border: '1px dashed var(--border-subtle)',
                               background: getLayerColor(aboveCommonLayer),
-                              opacity: 0.4,
+                              opacity: 0.35,
                               pointerEvents: 'none',
                               cursor: 'default'
                             }}
