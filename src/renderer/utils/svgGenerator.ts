@@ -1,4 +1,11 @@
 import { MIN_REAL_HEIGHT, UNIFORM_HEIGHT } from '../components/LayerBlock'
+import {
+  computeRgbScaleFactor,
+  getLastEmlIndex,
+  isCommonLayer,
+  resolveChannelThickness
+} from '../domain/geometryEngine'
+import { EXPORT_LAYOUT } from '../domain/layoutContext'
 import type { ChannelCode, Layer, PaletteType, StructureMode, ThicknessMode } from '../types'
 import { getTextColorForBg, resolveLayerColorHex } from './colorUtils'
 
@@ -42,52 +49,6 @@ function computeTotalHeight(heights: number[]): number {
   return heights.reduce((sum, height) => sum + height, 0) + (heights.length - 1) * GAP
 }
 
-function computeRgbScaleFactor(layers: Layer[], canvasHeight: number): number {
-  if (layers.length === 0) {
-    return 1
-  }
-
-  const lastEmlIndex = getLastEmlIndex(layers)
-  const channelSection = lastEmlIndex >= 0 ? layers.slice(0, lastEmlIndex + 1) : []
-  const lowerSection = lastEmlIndex >= 0 ? layers.slice(lastEmlIndex + 1) : layers
-
-  const lowerThickness = lowerSection.reduce((sum, layer) => sum + layer.thickness, 0)
-  const maxChannelThickness = Math.max(
-    0,
-    ...CHANNELS.map((channel) =>
-      channelSection.reduce((sum, layer) => {
-        if (!layer.appliesTo.includes(channel)) {
-          return sum
-        }
-
-        return sum + resolveChannelThickness(layer, channel)
-      }, 0)
-    )
-  )
-  const totalThickness = lowerThickness + maxChannelThickness
-  const lowerRectCount = lowerSection.length
-  const maxChannelRectCount = Math.max(
-    0,
-    ...CHANNELS.map(
-      (channel) => channelSection.filter((layer) => layer.appliesTo.includes(channel)).length
-    )
-  )
-  const totalRectCount = lowerRectCount + maxChannelRectCount
-  const availableHeight = canvasHeight - totalRectCount * 22
-  const naiveScale = totalThickness > 0 ? availableHeight / totalThickness : 1
-
-  const allThicknesses = [
-    ...lowerSection.map((layer) => layer.thickness),
-    ...channelSection.flatMap((layer) =>
-      layer.appliesTo.map((channel) => resolveChannelThickness(layer, channel))
-    )
-  ]
-  const minThickness = allThicknesses.length > 0 ? Math.min(...allThicknesses) : 0
-  const minScaleForMin = minThickness > 0 ? MIN_REAL_HEIGHT / minThickness : 1
-
-  return Math.max(naiveScale, minScaleForMin)
-}
-
 function resolveBlockHeight(
   layer: Layer,
   thicknessMode: ThicknessMode,
@@ -106,24 +67,6 @@ function resolveBlockHeightForThickness(
   }
 
   return UNIFORM_HEIGHT
-}
-
-function getLastEmlIndex(layers: Layer[]): number {
-  for (let i = layers.length - 1; i >= 0; i -= 1) {
-    if (layers[i]?.role === 'eml') {
-      return i
-    }
-  }
-
-  return -1
-}
-
-function isCommonLayer(layer: Layer): boolean {
-  return layer.appliesTo.length === 3
-}
-
-function resolveChannelThickness(layer: Layer, channel: ChannelCode): number {
-  return layer.channelOverrides?.[channel]?.thickness ?? layer.thickness
 }
 
 function resolveChannelColorHex(
@@ -153,7 +96,8 @@ export function generateStackSVG(options: SvgExportOptions): string {
   if (structureMode === 'rgb') {
     const scaleFactor =
       thicknessMode === 'real'
-        ? options.scaleFactor ?? computeRgbScaleFactor(layers, TARGET_HEIGHT)
+        ? options.scaleFactor ??
+          computeRgbScaleFactor(layers, { ...EXPORT_LAYOUT, canvasHeight: TARGET_HEIGHT })
         : 1
     const lastEmlIndex = getLastEmlIndex(layers)
     const channelSection = lastEmlIndex >= 0 ? layers.slice(0, lastEmlIndex + 1) : []

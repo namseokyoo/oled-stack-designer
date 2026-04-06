@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { validateProject } from '../application/projectSerializer'
 import {
   selectSerializableProject,
   stripCompareState,
@@ -7,27 +8,6 @@ import {
 import type { Project } from '../types'
 
 const SCHEMA_VERSION = '1.0.0'
-
-function validateProject(data: unknown): data is Project {
-  if (typeof data !== 'object' || data === null) {
-    return false
-  }
-
-  const project = data as Record<string, unknown>
-  if (typeof project.schemaVersion !== 'string') {
-    return false
-  }
-
-  if (typeof project.metadata !== 'object' || project.metadata === null) {
-    return false
-  }
-
-  if (!Array.isArray(project.stacks)) {
-    return false
-  }
-
-  return true
-}
 
 function getFileName(filePath: string | null): string {
   return filePath?.split(/[/\\]/).pop() ?? 'Untitled'

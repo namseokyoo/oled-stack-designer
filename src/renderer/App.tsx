@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AboutDialog } from './components/AboutDialog'
 import { Canvas } from './components/Canvas'
+import { CommandPanel } from './components/CommandPanel'
 import { CompareCanvas } from './components/CompareCanvas'
 import { ExamplesDialog } from './components/ExamplesDialog'
 import { ExportDialog } from './components/ExportDialog'
@@ -233,6 +234,7 @@ export function App() {
         <PropertiesPanel />
       </div>
       <StatusBar />
+      <CommandPanel />
       {showExport ? <ExportDialog onClose={() => setShowExport(false)} /> : null}
       {showAbout ? <AboutDialog onClose={() => setShowAbout(false)} /> : null}
       {showHelp ? <HelpDialog onClose={() => setShowHelp(false)} /> : null}

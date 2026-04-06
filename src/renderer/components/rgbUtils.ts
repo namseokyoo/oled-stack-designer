@@ -12,9 +12,8 @@ export type ChannelSectionBlock =
   | { type: 'common'; layers: Layer[] }
   | { type: 'fmm'; layers: Layer[] }
 
-export function isCommonLayer(layer: Layer): boolean {
-  return layer.appliesTo.length === CHANNELS.length
-}
+// @deprecated — use domain/geometryEngine directly. Remove after Phase 0 Step 0-8
+export { isCommonLayer } from '../domain/geometryEngine'
 
 export function splitChannelSection(channelSection: Layer[]): ChannelSectionBlock[] {
   const blocks: ChannelSectionBlock[] = []

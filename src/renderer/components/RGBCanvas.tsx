@@ -20,6 +20,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Lock, Plus } from 'lucide-react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from 'react'
 import { useStackStore } from '../stores/useStackStore'
+import { getLastEmlIndex } from '../domain/geometryEngine'
 import type { Layer } from '../types'
 import { ContextMenu, SplitConfirmDialog, type ContextMenuState } from './ContextMenu'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
@@ -40,16 +41,6 @@ interface DeleteTarget {
 
 interface RGBCanvasProps {
   onOpenExamples: () => void
-}
-
-function getLastEmlIndex(layers: Layer[]): number {
-  for (let index = layers.length - 1; index >= 0; index -= 1) {
-    if (layers[index]?.role === 'eml') {
-      return index
-    }
-  }
-
-  return -1
 }
 
 function getSortableId(layerId: string, location: string): string {

@@ -1,5 +1,7 @@
 import { Plus, X } from 'lucide-react'
 import { useState } from 'react'
+import { validateProject } from '../application/projectSerializer'
+import { getLastEmlIndex } from '../domain/geometryEngine'
 import { useStackStore } from '../stores/useStackStore'
 import type { Layer, Project } from '../types'
 import { getLayerColor } from './LayerBlock'
@@ -45,31 +47,6 @@ function getFileName(filePath: string): string {
 
 function getProjectLayers(project: Project): Layer[] {
   return project.stacks[0]?.layers ?? []
-}
-
-function getLastEmlIndex(layers: Layer[]): number {
-  for (let index = layers.length - 1; index >= 0; index -= 1) {
-    if (layers[index]?.role === 'eml') {
-      return index
-    }
-  }
-
-  return -1
-}
-
-function validateProject(data: unknown): data is Project {
-  if (typeof data !== 'object' || data === null) {
-    return false
-  }
-
-  const project = data as Record<string, unknown>
-
-  return (
-    typeof project.schemaVersion === 'string' &&
-    typeof project.metadata === 'object' &&
-    project.metadata !== null &&
-    Array.isArray(project.stacks)
-  )
 }
 
 function buildUnifiedLayerList(slots: CompareSlot[]): LayerKey[] {
